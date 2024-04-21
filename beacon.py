@@ -108,6 +108,7 @@ class BeaconProbe:
 
         # Register z_virtual_endstop
         self.printer.lookup_object("pins").register_chip("probe", self)
+        self.printer.lookup_object("pins").register_chip("beacon", self)
         # Register event handlers
         self.printer.register_event_handler("klippy:connect", self._handle_connect)
         self.printer.register_event_handler(
