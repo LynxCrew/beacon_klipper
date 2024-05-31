@@ -1299,12 +1299,12 @@ class BeaconProbe:
             )
         )
 
-        toolhead = self.printer.lookup_object("toolhead")
-        self.toolhead.wait_moves()
-        self.toolhead.dwell(0.5)
-
         liftpos = [None, None, start_height]
-        self.toolhead.manual_move(liftpos, lift_speed)
+        if self.trigger_distance > start_height:
+            initial_lift_pos = [None, None, self.trigger_distance]
+            self.toolhead.manual_move(initial_lift_pos, lift_speed)
+        else:
+            self.toolhead.manual_move(liftpos, lift_speed)
 
         self.multi_probe_begin()
         positions = []
