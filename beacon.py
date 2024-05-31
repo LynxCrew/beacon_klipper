@@ -2521,7 +2521,7 @@ class BeaconContactEndstopWrapper:
                     if accel < 0:
                         logging.info("Contact triggered while decelerating")
                         raise self.beacon.printer.command_error(
-                            "No trigger on probe after full movement"
+                            "No trigger on contact after full movement"
                         )
                     elif accel > 0:
                         raise self.beacon.printer.command_error(
