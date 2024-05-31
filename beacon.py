@@ -1299,6 +1299,10 @@ class BeaconProbe:
             )
         )
 
+        toolhead = self.printer.lookup_object("toolhead")
+        self.toolhead.wait_moves()
+        self.toolhead.dwell(0.5)
+
         liftpos = [None, None, start_height]
         self.toolhead.manual_move(liftpos, lift_speed)
 
