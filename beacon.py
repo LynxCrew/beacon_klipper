@@ -1275,10 +1275,12 @@ class BeaconProbe:
             probe = self._probe
             speed = gcmd.get_float("PROBE_SPEED", self.speed, above=0.0)
             sample_retract_dist = gcmd.get_float("SAMPLE_RETRACT_DIST", 0)
+            start_height = self.trigger_distance + sample_retract_dist
         elif probe_method == "contact":
             probe = self._probe_contact
             speed = gcmd.get_float("PROBE_SPEED", self.autocal_speed, above=0.0)
             sample_retract_dist = gcmd.get_float("SAMPLE_RETRACT_DIST", default=self.autocal_retract_dist)
+            start_height = self.trigger_distance + sample_retract_dist
         else:
             raise gcmd.error("Invalid PROBE_METHOD, valid choices: proximity, contact")
 
@@ -1297,7 +1299,6 @@ class BeaconProbe:
             )
         )
 
-        start_height = self.trigger_distance + sample_retract_dist
         liftpos = [None, None, start_height]
         self.toolhead.manual_move(liftpos, lift_speed)
 
@@ -2521,7 +2522,7 @@ class BeaconContactEndstopWrapper:
                     if accel < 0:
                         logging.info("Contact triggered while decelerating")
                         raise self.beacon.printer.command_error(
-                            "No trigger on contact after full movement"
+                            "No trigger on probe after full movement"
                         )
                     elif accel > 0:
                         raise self.beacon.printer.command_error(
