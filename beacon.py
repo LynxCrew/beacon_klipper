@@ -568,7 +568,7 @@ class BeaconProbe:
         finally:
             self.mcu_contact_probe.deactivate_gcode.run_gcode_from_command()
 
-    def _probe_contact(self, speed):
+    def _probe_contact(self, speed, num_samples=10, allow_faulty=False):
         self.toolhead.get_last_move_time()
         self._sample_async()
         start_pos = self.toolhead.get_position()
@@ -1270,7 +1270,16 @@ class BeaconProbe:
         sample_count = gcmd.get_int("SAMPLES", 10, minval=1)
         sample_retract_dist = gcmd.get_float("SAMPLE_RETRACT_DIST", 0)
         allow_faulty = gcmd.get_int("ALLOW_FAULTY_COORDINATE", 0) != 0
+        probe_method = gcmd.get("PROBE_METHOD", self.default_probe_method).lower()
         pos = self.toolhead.get_position()
+
+        if probe_method == "proximity":
+            probe = self._probe
+        elif probe_method == "contact":
+            probe = self._probe_contact
+        else:
+            raise gcmd.error("Invalid PROBE_METHOD, valid choices: proximity, contact")
+
         gcmd.respond_info(
             "PROBE_ACCURACY at X:%.3f Y:%.3f Z:%.3f"
             " (samples=%d retract=%.3f"
@@ -1293,7 +1302,7 @@ class BeaconProbe:
         self.multi_probe_begin()
         positions = []
         while len(positions) < sample_count:
-            pos = self._probe(speed, allow_faulty=allow_faulty)
+            pos = probe(speed, allow_faulty=allow_faulty)
             positions.append(pos)
             self.toolhead.manual_move(liftpos, lift_speed)
         self.multi_probe_end()
