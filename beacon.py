@@ -1267,7 +1267,6 @@ class BeaconProbe:
     def cmd_PROBE_ACCURACY(self, gcmd):
         lift_speed = self.get_lift_speed(gcmd)
         sample_count = gcmd.get_int("SAMPLES", 10, minval=1)
-        sample_retract_dist = gcmd.get_float("SAMPLE_RETRACT_DIST", 0)
         allow_faulty = gcmd.get_int("ALLOW_FAULTY_COORDINATE", 0) != 0
         probe_method = gcmd.get("PROBE_METHOD", self.default_probe_method).lower()
         pos = self.toolhead.get_position()
@@ -1275,9 +1274,11 @@ class BeaconProbe:
         if probe_method == "proximity":
             probe = self._probe
             speed = gcmd.get_float("PROBE_SPEED", self.speed, above=0.0)
+            sample_retract_dist = gcmd.get_float("SAMPLE_RETRACT_DIST", 0)
         elif probe_method == "contact":
             probe = self._probe_contact
             speed = gcmd.get_float("PROBE_SPEED", self.autocal_speed, above=0.0)
+            sample_retract_dist = gcmd.get_float("SAMPLE_RETRACT_DIST", default=self.autocal_retract_dist)
         else:
             raise gcmd.error("Invalid PROBE_METHOD, valid choices: proximity, contact")
 
