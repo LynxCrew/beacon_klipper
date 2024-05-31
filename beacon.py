@@ -31,6 +31,7 @@ from . import adxl345
 from .homing import HomingMove
 from mcu import MCU, MCU_trsync
 from clocksync import SecondarySync
+from extras.danger_options import get_danger_options
 
 STREAM_BUFFER_LIMIT_DEFAULT = 100
 STREAM_TIMEOUT = 1.0
@@ -52,8 +53,8 @@ class BeaconProbe:
         self.x_offset = config.getfloat("x_offset", 0.0)
         self.y_offset = config.getfloat("y_offset", 0.0)
 
-        self.trigger_distance = config.getfloat("trigger_distance", 2.0)
-        self.trigger_dive_threshold = config.getfloat("trigger_dive_threshold", 1.0)
+        self.trigger_distance = config.getfloat("trigger_distance", 3.0)
+        self.trigger_dive_threshold = config.getfloat("trigger_dive_threshold", 2.0)
         self.trigger_hysteresis = config.getfloat("trigger_hysteresis", 0.006)
         self.z_settling_time = config.getint("z_settling_time", 5, minval=0)
 
@@ -72,6 +73,17 @@ class BeaconProbe:
         self.autocal_tolerance = config.getfloat("autocal_tolerance", 0.008)
         self.autocal_max_retries = config.getfloat("autocal_max_retries", 3)
 
+        self.mcu_temp_wrapper = None
+        self.coil_temp_wrapper = None
+        self.disable_temp_updates_when_homing = config.getboolean(
+            "disable_temp_updates_when_homing", False
+        )
+        self.default_probe_method = config.getchoice(
+            "default_probe_method",
+            PROBING_METHOD_CHOICES,
+            "proximity"
+        )
+
         # Load models
         self.model = None
         self.models = {}
@@ -82,6 +94,7 @@ class BeaconProbe:
         self.model_manager = ModelManager(self)
 
         # Temperature sensor integration
+        self.temp = None
         self.last_temp = 0
         self.last_mcu_temp = None
         self.measured_min = 99999999.0
@@ -97,6 +110,8 @@ class BeaconProbe:
         self.last_offset_result = None
         self.last_contact_msg = None
         self.hardware_failure = None
+
+        self.last_state = False
 
         self.mesh_helper = BeaconMeshHelper.create(self, config)
         self.homing_helper = BeaconHomingHelper.create(self, config)
@@ -190,6 +205,9 @@ class BeaconProbe:
             desc=self.cmd_BEACON_ESTIMATE_BACKLASH_help,
         )
         self.gcode.register_command("PROBE", self.cmd_PROBE, desc=self.cmd_PROBE_help)
+        self.gcode.register_command(
+            "QUERY_PROBE", self.cmd_QUERY_PROBE, desc=self.cmd_QUERY_PROBE_help
+        )
         self.gcode.register_command(
             "PROBE_ACCURACY", self.cmd_PROBE_ACCURACY, desc=self.cmd_PROBE_ACCURACY_help
         )
@@ -369,10 +387,12 @@ class BeaconProbe:
     # Probe interface
 
     def multi_probe_begin(self):
+        self.printer.send_event("beacon:probing_move_begin")
         self._start_streaming()
 
     def multi_probe_end(self):
         self._stop_streaming()
+        self.printer.send_event("beacon:probing_move_end")
 
     def get_offsets(self):
         if self._current_probe == "contact":
@@ -386,16 +406,31 @@ class BeaconProbe:
         return self.lift_speed
 
     def run_probe(self, gcmd):
-        method = gcmd.get("PROBE_METHOD", "proximity").lower()
+        if self.printer.is_shutdown():
+            raise self.printer.command_error(
+                "Probing failed due to printer shutdown"
+            )
+        method = gcmd.get("PROBE_METHOD", self.default_probe_method).lower()
         self._current_probe = method
         if method == "proximity":
             return self._run_probe_proximity(gcmd)
         elif method == "contact":
+            if self.printer.is_shutdown():
+                raise self.printer.command_error(
+                    "Probing failed due to printer shutdown"
+                )
+            self.printer.send_event("beacon:probing_move_begin")
             self._start_streaming()
             try:
                 return self._run_probe_contact(gcmd)
+            except self.printer.command_error:
+                if self.printer.is_shutdown():
+                    raise self.printer.command_error(
+                        "Probing failed due to printer shutdown"
+                    )
             finally:
                 self._stop_streaming()
+                self.printer.send_event("beacon:probing_move_end")
         else:
             raise gcmd.error("Invalid PROBE_METHOD, valid choices: proximity, contact")
 
@@ -419,11 +454,22 @@ class BeaconProbe:
         if "z" not in toolhead.get_status(curtime)["homed_axes"]:
             raise self.printer.command_error("Must home before probe")
 
+        if self.printer.is_shutdown():
+            raise self.printer.command_error(
+                "Probing failed due to printer shutdown"
+            )
+        self.printer.send_event("beacon:probing_move_begin")
         self._start_streaming()
         try:
             return self._probe(speed, allow_faulty=allow_faulty)
+        except self.printer.command_error:
+            if self.printer.is_shutdown():
+                raise self.printer.command_error(
+                    "Probing failed due to printer shutdown"
+                )
         finally:
             self._stop_streaming()
+            self.printer.send_event("beacon:probing_move_end")
 
     def _probing_move_to_probing_height(self, speed):
         curtime = self.reactor.monotonic()
@@ -434,9 +480,12 @@ class BeaconProbe:
             self.phoming.probing_move(self.mcu_probe, pos, speed)
             self._sample_printtime_sync(self.z_settling_time)
         except self.printer.command_error as e:
-            reason = str(e)
-            if "Timeout during probing move" in reason:
-                reason += probe.HINT_TIMEOUT
+            if self.printer.is_shutdown():
+                reason = "Probing failed due to printer shutdown"
+            else:
+                reason = str(e)
+                if "Timeout during probing move" in reason:
+                    reason += probe.HINT_TIMEOUT
             raise self.printer.command_error(reason)
 
     def _probe(self, speed, num_samples=10, allow_faulty=False):
@@ -641,10 +690,15 @@ class BeaconProbe:
         def cb(sample):
             samples.append(sample)
 
+        if self.printer.is_shutdown():
+            raise self.printer.command_error(
+                "Probing failed due to printer shutdown"
+            )
         # Descend while sampling
         toolhead.flush_step_generation()
+        self.printer.send_event("beacon:probing_move_begin")
+        self._start_streaming()
         try:
-            self._start_streaming()
             self._sample_printtime_sync(50)
             with self.streaming_session(cb):
                 self._sample_printtime_sync(50)
@@ -653,8 +707,14 @@ class BeaconProbe:
                 toolhead.manual_move(curpos, cal_speed)
                 toolhead.flush_step_generation()
                 self._sample_printtime_sync(50)
+        except self.printer.command_error:
+            if self.printer.is_shutdown():
+                raise self.printer.command_error(
+                    "Probing failed due to printer shutdown"
+                )
         finally:
             self._stop_streaming()
+            self.printer.send_event("beacon:probing_move_end")
 
         # Fit the sampled data
         z_offset = [s["pos"][2] for s in samples]
@@ -714,9 +774,10 @@ class BeaconProbe:
                 self, params["mcu_temp"], params["supply_voltage"]
             )
         if self.thermistor is not None:
-            self.last_temp = self.thermistor.calc_temp(
+            self.temp = self.thermistor.calc_temp(
                 params["coil_temp"] / self.temp_smooth_count * self.inv_adc_max
             )
+            self.last_temp = self.temp
 
     def _handle_beacon_contact(self, params):
         self.last_contact_msg = params
@@ -731,7 +792,7 @@ class BeaconProbe:
         orig = self.gcode.register_command(cmd, None)
 
         def cb(gcmd):
-            self._current_probe = gcmd.get("PROBE_METHOD", "proximity").lower()
+            self._current_probe = gcmd.get("PROBE_METHOD", self.default_probe_method).lower()
             return orig(gcmd)
 
         self.gcode.register_command(cmd, cb)
@@ -1023,6 +1084,7 @@ class BeaconProbe:
             "last_probe_result": self.last_probe_result,
             "last_offset_result": self.last_offset_result,
             "model": model,
+            "last_query": self.last_state,
         }
 
     # Webhook handlers
@@ -1056,6 +1118,17 @@ class BeaconProbe:
         self.last_probe_position = (pos[0] - offset[0], pos[1] - offset[1])
         self.last_probe_result = "ok"
 
+    cmd_QUERY_PROBE_help = "Return the status of the z-probe"
+
+    def cmd_QUERY_PROBE(self, gcmd):
+        res = 0
+        sample = self._sample_async()
+        if self.trigger_freq <= sample["freq"]:
+            res = 1
+        self.last_state = res
+        gcmd.respond_info("probe: %s" % (["open", "TRIGGERED"][not not res],))
+
+
     cmd_BEACON_CALIBRATE_help = "Calibrate beacon response curve"
 
     def cmd_BEACON_CALIBRATE(self, gcmd):
@@ -1082,9 +1155,13 @@ class BeaconProbe:
 
         next_dir = -1
 
+        if self.printer.is_shutdown():
+            raise self.printer.command_error(
+                "Probing failed due to printer shutdown"
+            )
+        self.printer.send_event("beacon:probing_move_begin")
+        self._start_streaming()
         try:
-            self._start_streaming()
-
             (cur_dist, _samples) = self._sample(wait, 10)
             pos = self.toolhead.get_position()
             missing = target - cur_dist
@@ -1103,9 +1180,14 @@ class BeaconProbe:
                 (dist, _samples) = self._sample(wait, 10)
                 {-1: samples_up, 1: samples_down}[next_dir].append(dist)
                 next_dir = next_dir * -1
-
+        except self.printer.command_error:
+            if self.printer.is_shutdown():
+                raise self.printer.command_error(
+                    "Probing failed due to printer shutdown"
+                )
         finally:
             self._stop_streaming()
+            self.printer.send_event("beacon:probing_move_end")
 
         res_up = median(samples_up)
         res_down = median(samples_down)
@@ -1303,6 +1385,11 @@ class BeaconProbe:
                 f.write(obj)
 
             with self.streaming_session(cb):
+                if self.printer.is_shutdown():
+                    raise self.printer.command_error(
+                        "Poking failed due to printer shutdown"
+                    )
+
                 self._sample_async()
                 self.toolhead.get_last_move_time()
                 pos = self.toolhead.get_position()
@@ -1390,7 +1477,13 @@ class BeaconProbe:
                         % (len(stop_samples) + 1, sample_count)
                     )
                 self.toolhead.wait_moves()
+
                 set_max_accel(desired_accel)
+
+                if self.printer.is_shutdown():
+                    raise self.printer.command_error(
+                        "Probing failed due to printer shutdown"
+                    )
                 try:
                     hmove = HomingMove(
                         self.printer, [(self.mcu_contact_probe, "contact")]
@@ -1399,7 +1492,7 @@ class BeaconProbe:
                 except self.printer.command_error:
                     if self.printer.is_shutdown():
                         raise self.printer.command_error(
-                            "Homing failed due to printer shutdown"
+                            "Probing failed due to printer shutdown"
                         )
                     raise
                 finally:
@@ -1956,19 +2049,218 @@ class BeaconProbeWrapper:
     def run_probe(self, gcmd):
         return self.beacon.run_probe(gcmd)
 
+COIL_REPORT_TIME = 1.0
 
-class BeaconTempWrapper:
+class BeaconCoilTempWrapper:
+    def __init__(self, config):
+        self.printer = config.get_printer()
+        self.name = config.get_name().split()[-1]
+
+        self.beacon = None
+
+        self.temperature_callback = None
+
+        self.report_time = COIL_REPORT_TIME
+
+        self.temp = self.min_temp = self.max_temp = 0.0
+
+        self.reactor = self.printer.get_reactor()
+        self.sample_timer = None
+        self.temperature_sample_thread = threading.Thread(
+            target=self._start_sample_timer
+        )
+        self.ignore = self.name in get_danger_options().temp_ignore_limits
+
+        self.printer.register_event_handler(
+            "klippy:ready", self.handle_coil_ready
+        )
+        self.printer.register_event_handler(
+            "homing:homing_move_begin_z", self._handle_homing_move_begin
+        )
+        self.printer.register_event_handler(
+            "beacon:probing_move_begin", self._handle_homing_move_begin
+        )
+        self.printer.register_event_handler(
+            "homing:homing_move_end_z", self._handle_homing_move_end
+        )
+        self.printer.register_event_handler(
+            "beacon:probing_move_end", self._handle_homing_move_end
+        )
+
+    def handle_coil_ready(self):
+        self.beacon = self.printer.lookup_object("beacon")
+        self.temperature_sample_thread.start()
+
+    def _start_sample_timer(self):
+        wait_time = self._sample_coil_temperature()
+        while wait_time > 0 and not self.printer.is_shutdown():
+            time.sleep(wait_time)
+            wait_time = self._sample_coil_temperature()
+
+    def _handle_homing_move_begin(self):
+        reactor = self.printer.get_reactor()
+        if (self.sample_timer is not None
+                and self.temperature_callback is not None
+                and self.beacon.disable_temp_updates_when_homing):
+            # reactor.unregister_timer(self.sample_timer)
+            # self.sample_timer = None
+            pass
+
+    def _handle_homing_move_end(self):
+        reactor = self.printer.get_reactor()
+        if (self.sample_timer is None
+                and self.temperature_callback is not None
+                and self.beacon.disable_temp_updates_when_homing):
+            # self.sample_timer = reactor.register_timer(
+            #     self._sample_coil_temperature, reactor.NOW)
+            pass
+
+    def setup_callback(self, temperature_callback):
+        self.temperature_callback = temperature_callback
+
+    def setup_minmax(self, min_temp, max_temp):
+        self.min_temp = min_temp
+        self.max_temp = max_temp
+
+    def get_report_time_delta(self):
+        return self.report_time
+
+    def _sample_coil_temperature(self):
+        self.temp = self.beacon.temp
+
+        if self.temp is not None:
+            if ((self.temp < self.min_temp or self.temp > self.max_temp)
+                    and not self.ignore):
+                self.printer.invoke_shutdown(
+                    "[%s] temperature %0.1f outside range of %0.1f:%.01f"
+                    % (self.name, self.temp, self.min_temp, self.max_temp)
+                )
+        else:
+            self.temp = 0.0
+
+        measured_time = self.reactor.monotonic()
+
+        self.temperature_callback(
+            self.get_mcu().estimated_print_time(measured_time), self.temp
+        )
+
+        return self.report_time
+
+    def get_mcu(self):
+        return self.beacon._mcu
+
+    def set_report_time(self, report_time):
+        self.report_time = report_time
+
+
+
+BEACON_REPORT_TIME = 1.0
+
+class BeaconMCUTempWrapper:
     def __init__(self, beacon):
         self.beacon = beacon
+        self.printer = beacon.printer
+        self.measured_min = 99999999.0
+        self.measured_max = 0.0
 
-    def get_temp(self, eventtime):
-        return self.beacon.last_temp, 0
+        self.name = None
+
+        self.temp = self.min_temp = self.max_temp = 0.0
+        self.temperature_callback = None
+
+        self.report_time = BEACON_REPORT_TIME
+        self.reactor = self.beacon.printer.get_reactor()
+        self.sample_timer = None
+        self.temperature_sample_thread = threading.Thread(
+            target=self._start_sample_timer
+        )
+        self.ignore = True
+
+    def _handle_homing_move_begin(self):
+        reactor = self.printer.get_reactor()
+        if (self.sample_timer is not None
+                and self.temperature_callback is not None
+                and self.beacon.disable_temp_updates_when_homing):
+            # reactor.unregister_timer(self.sample_timer)
+            # self.sample_timer = None
+            pass
+
+    def _handle_homing_move_end(self):
+        reactor = self.printer.get_reactor()
+        if (self.sample_timer is None
+                and self.temperature_callback is not None
+                and self.beacon.disable_temp_updates_when_homing):
+            # self.sample_timer = reactor.register_timer(
+            #     self._sample_beacon_temperature, reactor.NOW)
+            pass
+
+    def activate_wrapper(self, config):
+        self.name = config.get_name().split()[-1]
+        self.ignore = self.name in get_danger_options().temp_ignore_limits
+
+        self.temperature_sample_thread.start()
+        self.printer.register_event_handler(
+            "homing:homing_move_begin_z", self._handle_homing_move_begin
+        )
+        self.printer.register_event_handler(
+            "beacon:probing_move_begin", self._handle_homing_move_begin
+        )
+        self.printer.register_event_handler(
+            "homing:homing_move_end_z", self._handle_homing_move_end
+        )
+        self.printer.register_event_handler(
+            "beacon:probing_move_end", self._handle_homing_move_end
+        )
+
+    def _start_sample_timer(self):
+        wait_time = self._sample_beacon_temperature()
+        while wait_time > 0 and not self.printer.is_shutdown():
+            time.sleep(wait_time)
+            wait_time = self._sample_beacon_temperature()
+
+    def get_mcu(self):
+        return self.beacon._mcu
+
+    def _sample_beacon_temperature(self):
+        self.temp, supply_voltage = self.beacon.last_mcu_temp
+
+        if self.temp is not None:
+            if ((self.temp < self.min_temp or self.temp > self.max_temp)
+                    and not self.ignore):
+                self.printer.invoke_shutdown(
+                    "[%s] temperature %0.1f outside range of %0.1f:%.01f"
+                    % (self.name, self.temp, self.min_temp, self.max_temp)
+                )
+        else:
+            self.temp = 0.0
+
+        measured_time = self.reactor.monotonic()
+
+        self.temperature_callback(
+            self.get_mcu().estimated_print_time(measured_time), self.temp
+        )
+
+        return self.report_time
+
+    def set_report_time(self, report_time):
+        self.report_time = report_time
+
+    def setup_minmax(self, min_temp, max_temp):
+        self.min_temp = min_temp
+        self.max_temp = max_temp
+
+    def setup_callback(self, temperature_callback):
+        self.temperature_callback = temperature_callback
 
     def get_status(self, eventtime):
+        (mcu_temp, supply_voltage) = (0, 0) if self.beacon.last_mcu_temp is None else self.beacon.last_mcu_temp
+        if mcu_temp:
+            self.measured_min = min(self.measured_min, mcu_temp)
+            self.measured_max = max(self.measured_max, mcu_temp)
         return {
-            "temperature": round(self.beacon.last_temp, 2),
-            "measured_min_temp": round(self.beacon.measured_min, 2),
-            "measured_max_temp": round(self.beacon.measured_max, 2),
+            "temperature": round(mcu_temp, 2),
+            "measured_min_temp": round(self.measured_min, 2),
+            "measured_max_temp": round(self.measured_max, 2),
         }
 
 
@@ -2187,6 +2479,10 @@ class BeaconContactEndstopWrapper:
         return self._shared._trigger_completion
 
     def home_wait(self, home_end_time):
+        if self.beacon.printer.is_shutdown():
+            raise self.beacon.printer.command_error(
+                "Probing failed due to printer shutdown"
+            )
         try:
             ret = self._shared.trsync_stop(home_end_time)
             if ret is not None:
@@ -2200,7 +2496,7 @@ class BeaconContactEndstopWrapper:
                 if ret["triggered"] == 0:
                     now = self.beacon.reactor.monotonic()
                     if now >= deadline:
-                        raise self.printer.command_error("Timeout getting contact time")
+                        raise self.beacon.printer.command_error("Timeout getting contact time")
                     self.beacon.reactor.pause(now + 0.001)
                     continue
                 time = self.beacon._clock32_to_time(ret["detect_clock"])
@@ -2221,6 +2517,11 @@ class BeaconContactEndstopWrapper:
                             "Contact triggered while accelerating"
                         )
                     return time
+        except self.beacon.printer.command_error:
+            if self.beacon.printer.is_shutdown():
+                raise self.beacon.printer.command_error(
+                    "Probing failed due to printer shutdown"
+                )
         finally:
             self.beacon.beacon_contact_stop_home_cmd.send()
 
@@ -2246,6 +2547,10 @@ HOMING_AUTOCAL_METHOD_CHOICES = {
     "proximity": HOMING_AUTOCAL_METHOD_PROXIMITY,
 }
 HOMING_AUTOCAL_CHOICES_METHOD = {v: k for k, v in HOMING_AUTOCAL_METHOD_CHOICES.items()}
+PROBING_METHOD_CHOICES = {
+    "contact": "contact",
+    "proximity": "proximity",
+}
 
 
 class BeaconHomingHelper:
@@ -2260,7 +2565,7 @@ class BeaconHomingHelper:
         self.beacon = beacon
         self.home_pos = home_xy_position
 
-        for section in ["safe_z_homing", "homing_override"]:
+        for section in ["safe_z_homing"]:
             if config.has_section(section):
                 raise config.error(
                     "home_xy_position cannot be used with [%s]" % (section,)
@@ -2292,8 +2597,13 @@ class BeaconHomingHelper:
         # Ensure homing is loaded so we can override G28
         beacon.printer.load_object(config, "homing")
         self.gcode = beacon.printer.lookup_object("gcode")
-        self.prev_gcmd = self.gcode.register_command("G28", None)
-        self.gcode.register_command("G28", self.cmd_G28)
+        homing_override = beacon.printer.lookup_object("homing_override", None)
+        if homing_override is not None:
+            self.prev_gcmd = homing_override.prev_G28
+            homing_override.prev_G28 = self.cmd_G28
+        else:
+            self.prev_gcmd = self.gcode.register_command("G28", None)
+            self.gcode.register_command("G28", self.cmd_G28)
 
     def _maybe_zhop(self, toolhead):
         if self.z_hop != 0:
@@ -2455,6 +2765,11 @@ class BeaconMeshHelper:
         self.adaptive_margin = mesh_config.getfloat(
             "adaptive_margin", 0, note_valid=False
         )
+        self.default_mesh_method = config.getchoice(
+            "default_mesh_method",
+            PROBING_METHOD_CHOICES,
+            "proximity"
+        )
 
         contact_def_min = config.getfloatlist(
             "contact_mesh_min",
@@ -2477,6 +2792,7 @@ class BeaconMeshHelper:
                 max(self.def_min_y - yo, self.def_min_y),
             )
 
+        def_contact_max = contact_def_max
         if contact_def_max is None:
             def_contact_max = (
                 min(self.def_max_x - xo, self.def_max_x),
@@ -2526,7 +2842,7 @@ class BeaconMeshHelper:
 
     def cmd_BED_MESH_CALIBRATE(self, gcmd):
         method = gcmd.get("METHOD", "beacon").lower()
-        probe_method = gcmd.get("PROBE_METHOD", "proximity").lower()
+        probe_method = gcmd.get("PROBE_METHOD", self.default_mesh_method).lower()
         if probe_method != "proximity":
             method = "automatic"
         if method == "beacon":
@@ -2743,6 +3059,10 @@ class BeaconMeshHelper:
         speed = gcmd.get_float("SPEED", self.speed, above=0.0)
         runs = gcmd.get_int("RUNS", self.runs, minval=1)
 
+        if self.beacon.printer.is_shutdown():
+            raise self.beacon.printer.command_error(
+                "Probing failed due to printer shutdown"
+            )
         try:
             self.beacon._start_streaming()
 
@@ -2761,7 +3081,11 @@ class BeaconMeshHelper:
                     self._collect_zero_ref(speed, self.zero_ref_mode[1])
                 else:
                     self.zero_ref_val = median(self.zero_ref_bin)
-
+        except self.beacon.printer.command_error:
+            if self.beacon.printer.is_shutdown():
+                raise self.beacon.printer.command_error(
+                    "Probing failed due to printer shutdown"
+                )
         finally:
             self.beacon._stop_streaming()
 
@@ -3403,10 +3727,10 @@ class BeaconAccelHelper(object):
         return cli
 
     def read_reg(self, reg):
-        raise self.printer.command_error("Not supported")
+        raise self.beacon.printer.command_error("Not supported")
 
     def set_reg(self, reg, val, minclock=0):
-        raise self.printer.command_error("Not supported")
+        raise self.beacon.printer.command_error("Not supported")
 
     def is_measuring(self):
         return self._stream_en > 0
@@ -3545,10 +3869,9 @@ class APIDumpHelper:
 def load_config(config):
     beacon = BeaconProbe(config)
     config.get_printer().add_object("probe", BeaconProbeWrapper(beacon))
-    temp = BeaconTempWrapper(beacon)
-    config.get_printer().add_object("temperature_sensor beacon_coil", temp)
     pheaters = beacon.printer.load_object(config, "heaters")
-    pheaters.available_sensors.append("temperature_sensor beacon_coil")
+    beacon.mcu_temp_wrapper = BeaconMCUTempWrapper(beacon)
+    pheaters.add_sensor_factory("beacon_coil", BeaconCoilTempWrapper)
     return beacon
 
 
