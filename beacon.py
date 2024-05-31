@@ -1280,7 +1280,7 @@ class BeaconProbe:
             probe = self._probe_contact
             speed = gcmd.get_float("PROBE_SPEED", self.autocal_speed, above=0.0)
             sample_retract_dist = gcmd.get_float("SAMPLE_RETRACT_DIST", default=self.autocal_retract_dist)
-            start_height = self.trigger_distance + sample_retract_dist
+            start_height = sample_retract_dist
         else:
             raise gcmd.error("Invalid PROBE_METHOD, valid choices: proximity, contact")
 
