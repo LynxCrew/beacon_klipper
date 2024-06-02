@@ -2100,18 +2100,6 @@ class BeaconCoilTempWrapper:
         self.printer.register_event_handler(
             "klippy:ready", self.handle_coil_ready
         )
-        self.printer.register_event_handler(
-            "homing:homing_move_begin_z", self._handle_homing_move_begin
-        )
-        self.printer.register_event_handler(
-            "beacon:probing_move_begin", self._handle_homing_move_begin
-        )
-        self.printer.register_event_handler(
-            "homing:homing_move_end_z", self._handle_homing_move_end
-        )
-        self.printer.register_event_handler(
-            "beacon:probing_move_end", self._handle_homing_move_end
-        )
 
     def handle_coil_ready(self):
         self.beacon = self.printer.lookup_object("beacon")
@@ -2122,24 +2110,6 @@ class BeaconCoilTempWrapper:
         while wait_time > 0 and not self.printer.is_shutdown():
             time.sleep(wait_time)
             wait_time = self._sample_coil_temperature()
-
-    def _handle_homing_move_begin(self):
-        reactor = self.printer.get_reactor()
-        if (self.sample_timer is not None
-                and self.temperature_callback is not None
-                and self.beacon.disable_temp_updates_when_homing):
-            # reactor.unregister_timer(self.sample_timer)
-            # self.sample_timer = None
-            pass
-
-    def _handle_homing_move_end(self):
-        reactor = self.printer.get_reactor()
-        if (self.sample_timer is None
-                and self.temperature_callback is not None
-                and self.beacon.disable_temp_updates_when_homing):
-            # self.sample_timer = reactor.register_timer(
-            #     self._sample_coil_temperature, reactor.NOW)
-            pass
 
     def setup_callback(self, temperature_callback):
         self.temperature_callback = temperature_callback
@@ -2202,41 +2172,11 @@ class BeaconMCUTempWrapper:
         )
         self.ignore = True
 
-    def _handle_homing_move_begin(self):
-        reactor = self.printer.get_reactor()
-        if (self.sample_timer is not None
-                and self.temperature_callback is not None
-                and self.beacon.disable_temp_updates_when_homing):
-            # reactor.unregister_timer(self.sample_timer)
-            # self.sample_timer = None
-            pass
-
-    def _handle_homing_move_end(self):
-        reactor = self.printer.get_reactor()
-        if (self.sample_timer is None
-                and self.temperature_callback is not None
-                and self.beacon.disable_temp_updates_when_homing):
-            # self.sample_timer = reactor.register_timer(
-            #     self._sample_beacon_temperature, reactor.NOW)
-            pass
-
     def activate_wrapper(self, config):
         self.name = config.get_name().split()[-1]
         self.ignore = self.name in get_danger_options().temp_ignore_limits
 
         self.temperature_sample_thread.start()
-        self.printer.register_event_handler(
-            "homing:homing_move_begin_z", self._handle_homing_move_begin
-        )
-        self.printer.register_event_handler(
-            "beacon:probing_move_begin", self._handle_homing_move_begin
-        )
-        self.printer.register_event_handler(
-            "homing:homing_move_end_z", self._handle_homing_move_end
-        )
-        self.printer.register_event_handler(
-            "beacon:probing_move_end", self._handle_homing_move_end
-        )
 
     def _start_sample_timer(self):
         wait_time = self._sample_beacon_temperature()
