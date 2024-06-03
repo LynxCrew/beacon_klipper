@@ -1487,6 +1487,7 @@ class BeaconProbe:
             gcode.run_script_from_command("SET_VELOCITY_LIMIT ACCEL=%.3f" % (value,))
 
         homing_state = BeaconHomingState()
+        homing_state.set_calibrating(True)
         self.printer.send_event("homing:home_rails_begin", homing_state, [])
         self.mcu_contact_probe.activate_gcode.run_gcode_from_command()
         try:
@@ -2700,7 +2701,10 @@ class BeaconHomingHelper:
 class BeaconHomingState:
     def __init__(self):
         self.is_calibrating = False
+
     def set_calibrating(self, calibrating):
+        self.is_calibrating = calibrating
+
     def get_axes(self):
         return [2]
 
