@@ -1485,6 +1485,7 @@ class BeaconProbe:
             gcode.run_script_from_command("SET_VELOCITY_LIMIT ACCEL=%.3f" % (value,))
 
         homing_state = BeaconHomingState(self.printer)
+        homing_state.set_calibrating(True)
         self.printer.send_event("homing:home_rails_begin", homing_state, [])
         self.mcu_contact_probe.activate_gcode.run_gcode_from_command()
         try:
@@ -1562,7 +1563,6 @@ class BeaconProbe:
             self.toolhead.wait_moves()
             self.toolhead.flush_step_generation()
             self.last_probe_result = "ok"
-            homing_state.set_calibrating(True)
             self.printer.send_event("homing:home_rails_end", homing_state, [])
             if gcmd.get_int("SKIP_MODEL_CREATION", 0) == 0:
                 self._calibrate(gcmd, force_pos, force_pos[2], True, True)
