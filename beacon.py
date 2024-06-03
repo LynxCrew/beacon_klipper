@@ -76,9 +76,7 @@ class BeaconProbe:
 
         self.mcu_temp_wrapper = None
         self.coil_temp_wrapper = None
-        self.disable_temp_updates_when_homing = config.getboolean(
-            "disable_temp_updates_when_homing", False
-        )
+
         self.default_probe_method = config.getchoice(
             "default_probe_method",
             PROBING_METHOD_CHOICES,
