@@ -2335,6 +2335,10 @@ class BeaconEndstopWrapper:
         # After homing Z we perform a measurement and adjust the toolhead
         # kinematic position.
         (dist, samples) = self.beacon._sample(self.beacon.z_settling_time, 10)
+        logging.info("BEACON_DIST:")
+        logging.info(dist)
+        logging.info("BEACON_SAMPLES")
+        logging.info(samples)
         if math.isinf(dist):
             logging.error("Post-homing adjustment measured samples %s", samples)
             raise self.beacon.printer.command_error(
