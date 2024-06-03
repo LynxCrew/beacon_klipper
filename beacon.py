@@ -1484,7 +1484,7 @@ class BeaconProbe:
         def set_max_accel(value):
             gcode.run_script_from_command("SET_VELOCITY_LIMIT ACCEL=%.3f" % (value,))
 
-        homing_state = BeaconHomingState()
+        homing_state = BeaconHomingState(self.printer)
         homing_state.set_calibrating(True)
         self.printer.send_event("homing:home_rails_begin", homing_state, [])
         self.mcu_contact_probe.activate_gcode.run_gcode_from_command()
@@ -2697,7 +2697,8 @@ class BeaconHomingHelper:
 
 
 class BeaconHomingState:
-    def __init__(self):
+    def __init__(self, printer):
+        self.printer = printer
         self.is_calibrating = False
 
     def set_calibrating(self, calibrating):
@@ -2707,7 +2708,7 @@ class BeaconHomingState:
         return [2]
 
     def get_trigger_position(self, stepper_name):
-        raise gcmd.error("get_trigger_position not supported")
+        raise self.printer.command_error("get_trigger_position not supported")
 
     def set_stepper_adjustment(self, stepper_name, adjustment):
         pass
