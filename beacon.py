@@ -2332,6 +2332,9 @@ class BeaconEndstopWrapper:
         if 2 not in homing_state.get_axes():
             return
 
+        if hasattr(homing_state, "is_calibrating") and homing_state.is_calibrating:
+            return
+
         # After homing Z we perform a measurement and adjust the toolhead
         # kinematic position.
         (dist, samples) = self.beacon._sample(self.beacon.z_settling_time, 10)
@@ -2695,6 +2698,9 @@ class BeaconHomingHelper:
 
 
 class BeaconHomingState:
+    def __init__(self):
+        self.is_calibrating = False
+    def set_calibrating(self, calibrating):
     def get_axes(self):
         return [2]
 
