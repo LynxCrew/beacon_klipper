@@ -36,7 +36,7 @@ def check_device_is_beacon(devpath):
     if manufacturer != "Beacon" and vendor != "04d8":
         return False
     product = read_dev_file(devpath, "product")
-    if not product.startswith("Beacon "):
+    if product is None or not product.startswith("Beacon "):
         return False
     rev = product[7:].lower()
     if not rev.startswith("rev"):
@@ -170,7 +170,7 @@ def task_check(device_path):
     if actual_fw_version != desired_fw_version:
         print(
             "Outdated Beacon firmware version %s, current version is %s.\n"
-            "Please run `install.sh` or `update_firmware.py all` to update to the latest version.\n"
+            "Please run `install.sh` or `update_firmware.py update all` to update to the latest version.\n"
             "Using an outdated firmware version can result in instability or failures."
             % (actual_fw_version, desired_fw_version)
         )
