@@ -755,6 +755,7 @@ class BeaconProbe:
             "%.3f to %.3f, speed %.2f mm/s, temp %.2fC"
             % (curpos[0], curpos[1], cal_floor, cal_ceil, cal_speed, temp_median)
         )
+        self.printer.lookup_object("toolhead").dwell(0.1)
 
     # Internal
 
