@@ -1935,11 +1935,13 @@ class ModelManager:
 
     def cmd_BEACON_MODEL_SELECT(self, gcmd):
         name = gcmd.get("NAME")
+        verbose = gcmd.get("VERBOSE", default="high").lower()
         model = self.beacon.models.get(name, None)
         if model is None:
             raise gcmd.error("Unknown model '%s'" % (name,))
         self.beacon.model = model
-        gcmd.respond_info("Selected Beacon model '%s'" % (name,))
+        if verbose == "high" or verbose == "low":
+            gcmd.respond_info("Selected Beacon model '%s'" % (name,))
 
     cmd_BEACON_MODEL_SAVE_help = "Save current beacon model"
 
