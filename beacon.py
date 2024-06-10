@@ -63,6 +63,11 @@ class BeaconProbe:
             {"contact": "contact", "proximity": "proximity"},
             "proximity",
         )
+        self.default_mesh_method = config.getchoice(
+            "default_mesh_method",
+            PROBING_METHOD_CHOICES,
+            "proximity"
+        )
 
         # If using paper for calibration, this would be .1mm
         self.cal_nozzle_z = config.getfloat("cal_nozzle_z", 0.1)
@@ -1504,7 +1509,7 @@ class BeaconProbe:
         def set_max_accel(value):
             gcode.run_script_from_command("SET_VELOCITY_LIMIT ACCEL=%.3f" % (value,))
 
-        homing_state = BeaconHomingState(self.printer)
+        homing_state = BeaconHomingState()
         homing_state.set_calibrating(True)
         self.printer.send_event("homing:home_rails_begin", homing_state, [])
         self.mcu_contact_probe.activate_gcode.run_gcode_from_command()
@@ -2725,8 +2730,7 @@ class BeaconHomingHelper:
 
 
 class BeaconHomingState:
-    def __init__(self, printer):
-        self.printer = printer
+    def __init__(self):
         self.is_calibrating = False
 
     def set_calibrating(self, calibrating):
@@ -2795,11 +2799,6 @@ class BeaconMeshHelper:
         self.runs = config.getint("mesh_runs", 1, minval=1)
         self.adaptive_margin = mesh_config.getfloat(
             "adaptive_margin", 0, note_valid=False
-        )
-        self.default_mesh_method = config.getchoice(
-            "default_mesh_method",
-            PROBING_METHOD_CHOICES,
-            "proximity"
         )
 
         contact_def_min = config.getfloatlist(
@@ -2874,7 +2873,7 @@ class BeaconMeshHelper:
     def cmd_BED_MESH_CALIBRATE(self, gcmd):
         method = gcmd.get("METHOD", "beacon").lower()
         probe_method = gcmd.get(
-            "PROBE_METHOD", self.default_mesh_method
+            "PROBE_METHOD", self.beacon.default_mesh_method
         ).lower()
         if probe_method != "proximity":
             method = "automatic"
