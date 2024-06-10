@@ -60,8 +60,8 @@ class BeaconProbe:
         self.z_settling_time = config.getint("z_settling_time", 5, minval=0)
         self.default_probe_method = config.getchoice(
             "default_probe_method",
-            {"contact": "contact", "proximity": "proximity"},
-            "proximity",
+            PROBING_METHOD_CHOICES,
+            "proximity"
         )
         self.default_mesh_method = config.getchoice(
             "default_mesh_method",
@@ -87,12 +87,6 @@ class BeaconProbe:
 
         self.mcu_temp_wrapper = None
         self.coil_temp_wrapper = None
-
-        self.default_probe_method = config.getchoice(
-            "default_probe_method",
-            PROBING_METHOD_CHOICES,
-            "proximity"
-        )
 
         # Load models
         self.model = None
