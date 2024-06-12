@@ -1136,7 +1136,7 @@ class BeaconProbe:
         if self.trigger_freq <= sample["freq"]:
             res = 1
         self.last_state = res
-        gcmd.respond_info("probe: %s" % (["open", "TRIGGERED"][not not res],))
+        gcmd.respond_info("beacon: %s" % (["open", "TRIGGERED"][not not res],))
 
     cmd_BEACON_CALIBRATE_help = "Calibrate beacon response curve"
 
