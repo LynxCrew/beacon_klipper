@@ -59,14 +59,10 @@ class BeaconProbe:
         self.trigger_hysteresis = config.getfloat("trigger_hysteresis", 0.006)
         self.z_settling_time = config.getint("z_settling_time", 5, minval=0)
         self.default_probe_method = config.getchoice(
-            "default_probe_method",
-            PROBING_METHOD_CHOICES,
-            "proximity"
+            "default_probe_method", PROBING_METHOD_CHOICES, "proximity"
         )
         self.default_mesh_method = config.getchoice(
-            "default_mesh_method",
-            PROBING_METHOD_CHOICES,
-            "proximity"
+            "default_mesh_method", PROBING_METHOD_CHOICES, "proximity"
         )
 
         # If using paper for calibration, this would be .1mm
@@ -422,9 +418,7 @@ class BeaconProbe:
 
     def run_probe(self, gcmd):
         if self.printer.is_shutdown():
-            raise self.printer.command_error(
-                "Probing failed due to printer shutdown"
-            )
+            raise self.printer.command_error("Probing failed due to printer shutdown")
         method = gcmd.get("PROBE_METHOD", self.default_probe_method).lower()
         self._current_probe = method
         if method == "proximity":
@@ -470,9 +464,7 @@ class BeaconProbe:
             raise self.printer.command_error("Must home before probe")
 
         if self.printer.is_shutdown():
-            raise self.printer.command_error(
-                "Probing failed due to printer shutdown"
-            )
+            raise self.printer.command_error("Probing failed due to printer shutdown")
         self.printer.send_event("beacon:probing_move_begin")
         self._start_streaming()
         try:
@@ -708,9 +700,7 @@ class BeaconProbe:
             samples.append(sample)
 
         if self.printer.is_shutdown():
-            raise self.printer.command_error(
-                "Probing failed due to printer shutdown"
-            )
+            raise self.printer.command_error("Probing failed due to printer shutdown")
         # Descend while sampling
         toolhead.flush_step_generation()
         self.printer.send_event("beacon:probing_move_begin")
@@ -1148,7 +1138,6 @@ class BeaconProbe:
         self.last_state = res
         gcmd.respond_info("probe: %s" % (["open", "TRIGGERED"][not not res],))
 
-
     cmd_BEACON_CALIBRATE_help = "Calibrate beacon response curve"
 
     def cmd_BEACON_CALIBRATE(self, gcmd):
@@ -1176,9 +1165,7 @@ class BeaconProbe:
         next_dir = -1
 
         if self.printer.is_shutdown():
-            raise self.printer.command_error(
-                "Probing failed due to printer shutdown"
-            )
+            raise self.printer.command_error("Probing failed due to printer shutdown")
         self.printer.send_event("beacon:probing_move_begin")
         self._start_streaming()
         try:
@@ -1299,7 +1286,9 @@ class BeaconProbe:
         elif probe_method == "contact":
             probe = self._probe_contact
             speed = gcmd.get_float("PROBE_SPEED", self.autocal_speed, above=0.0)
-            sample_retract_dist = gcmd.get_float("SAMPLE_RETRACT_DIST", default=self.autocal_retract_dist)
+            sample_retract_dist = gcmd.get_float(
+                "SAMPLE_RETRACT_DIST", default=self.autocal_retract_dist
+            )
             start_height = sample_retract_dist
         else:
             raise gcmd.error("Invalid PROBE_METHOD, valid choices: proximity, contact")
@@ -2095,7 +2084,9 @@ class BeaconProbeWrapper:
     def run_probe(self, gcmd):
         return self.beacon.run_probe(gcmd)
 
+
 COIL_REPORT_TIME = 1.0
+
 
 class BeaconCoilTempWrapper:
     def __init__(self, config):
@@ -2117,9 +2108,7 @@ class BeaconCoilTempWrapper:
         )
         self.ignore = self.name in get_danger_options().temp_ignore_limits
 
-        self.printer.register_event_handler(
-            "klippy:ready", self.handle_coil_ready
-        )
+        self.printer.register_event_handler("klippy:ready", self.handle_coil_ready)
 
     def handle_coil_ready(self):
         self.beacon = self.printer.lookup_object("beacon")
@@ -2145,8 +2134,9 @@ class BeaconCoilTempWrapper:
         self.temp = self.beacon.temp
 
         if self.temp is not None:
-            if ((self.temp < self.min_temp or self.temp > self.max_temp)
-                    and not self.ignore):
+            if (
+                self.temp < self.min_temp or self.temp > self.max_temp
+            ) and not self.ignore:
                 self.printer.invoke_shutdown(
                     "[%s] temperature %0.1f outside range of %0.1f:%.01f"
                     % (self.name, self.temp, self.min_temp, self.max_temp)
@@ -2169,8 +2159,8 @@ class BeaconCoilTempWrapper:
         self.report_time = report_time
 
 
-
 BEACON_REPORT_TIME = 1.0
+
 
 class BeaconMCUTempWrapper:
     def __init__(self, beacon):
@@ -2211,8 +2201,9 @@ class BeaconMCUTempWrapper:
         self.temp, supply_voltage = self.beacon.last_mcu_temp
 
         if self.temp is not None:
-            if ((self.temp < self.min_temp or self.temp > self.max_temp)
-                    and not self.ignore):
+            if (
+                self.temp < self.min_temp or self.temp > self.max_temp
+            ) and not self.ignore:
                 self.printer.invoke_shutdown(
                     "[%s] temperature %0.1f outside range of %0.1f:%.01f"
                     % (self.name, self.temp, self.min_temp, self.max_temp)
@@ -2239,7 +2230,9 @@ class BeaconMCUTempWrapper:
         self.temperature_callback = temperature_callback
 
     def get_status(self, eventtime):
-        (mcu_temp, supply_voltage) = (0, 0) if self.beacon.last_mcu_temp is None else self.beacon.last_mcu_temp
+        (mcu_temp, supply_voltage) = (
+            (0, 0) if self.beacon.last_mcu_temp is None else self.beacon.last_mcu_temp
+        )
         if mcu_temp:
             self.measured_min = min(self.measured_min, mcu_temp)
             self.measured_max = max(self.measured_max, mcu_temp)
@@ -2489,7 +2482,9 @@ class BeaconContactEndstopWrapper:
                 if ret["triggered"] == 0:
                     now = self.beacon.reactor.monotonic()
                     if now >= deadline:
-                        raise self.beacon.printer.command_error("Timeout getting contact time")
+                        raise self.beacon.printer.command_error(
+                            "Timeout getting contact time"
+                        )
                     self.beacon.reactor.pause(now + 0.001)
                     continue
                 time = self.beacon._clock32_to_time(ret["detect_clock"])
@@ -2866,9 +2861,7 @@ class BeaconMeshHelper:
 
     def cmd_BED_MESH_CALIBRATE(self, gcmd):
         method = gcmd.get("METHOD", "beacon").lower()
-        probe_method = gcmd.get(
-            "PROBE_METHOD", self.beacon.default_mesh_method
-        ).lower()
+        probe_method = gcmd.get("PROBE_METHOD", self.beacon.default_mesh_method).lower()
         if probe_method != "proximity":
             method = "automatic"
         if method == "beacon":
