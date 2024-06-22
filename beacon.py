@@ -2132,6 +2132,9 @@ class BeaconProbeWrapper:
             self.results = []
             return results
 
+    def get_status(self, eventtime):
+        return {"name": "beacon"}
+
 
 COIL_REPORT_TIME = 1.0
 
