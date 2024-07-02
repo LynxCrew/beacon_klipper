@@ -266,7 +266,7 @@ class BeaconProbe:
             logging.info(
                 "Could not find Beacon firmware update script, won't check for update."
             )
-            return
+            return ""
         serialport = self._mcu._serialport
 
         parent_conn, child_conn = multiprocessing.Pipe()
@@ -300,8 +300,7 @@ class BeaconProbe:
             except AttributeError:
                 logging.info(result)
             return result
-        else:
-            return ""
+        return ""
 
     def _build_config(self):
         version_info = self._check_mcu_version()
