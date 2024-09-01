@@ -155,7 +155,7 @@ class BeaconProbe:
         self._endstop_shared = BeaconEndstopShared(self)
         self.mcu_probe = BeaconEndstopWrapper(self)
         self.mcu_contact_probe = BeaconContactEndstopWrapper(self, config)
-        self._current_probe = "proximity"
+        self._current_probe = self.default_probe_method
 
         self.beacon_stream_cmd = None
         self.beacon_set_threshold = None
