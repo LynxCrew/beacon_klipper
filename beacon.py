@@ -43,6 +43,7 @@ class BeaconProbe:
     def __init__(self, config):
         self.printer = config.get_printer()
         self.reactor = self.printer.get_reactor()
+        self.mcu_temp_wrapper = BeaconMCUTempWrapper(self)
         self.name = config.get_name()
 
         self.home_dir = os.path.dirname(os.path.realpath(__file__))
@@ -82,9 +83,6 @@ class BeaconProbe:
         self.autocal_max_retries = config.getfloat("autocal_max_retries", 3)
         self.contact_latency_min = config.getint("contact_latency_min", 0)
         self.contact_sensitivity = config.getint("contact_sensitivity", 0)
-
-        self.mcu_temp_wrapper = None
-        self.coil_temp_wrapper = None
 
         # Load models
         self.model = None
@@ -2234,6 +2232,8 @@ class BeaconMCUTempWrapper:
     def __init__(self, beacon):
         self.beacon = beacon
         self.printer = beacon.printer
+        self.reactor = beacon.reactor
+        self.klipper_threads = self.printer.get_klipper_threads()
         self.measured_min = 99999999.0
         self.measured_max = 0.0
 
@@ -2243,24 +2243,16 @@ class BeaconMCUTempWrapper:
         self.temperature_callback = None
 
         self.report_time = BEACON_REPORT_TIME
-        self.reactor = self.beacon.printer.get_reactor()
-        self.sample_timer = None
-        self.temperature_sample_thread = threading.Thread(
-            target=self._start_sample_timer
-        )
+        self.temperature_sample_thread = None
         self.ignore = True
 
     def activate_wrapper(self, config):
         self.name = config.get_name().split()[-1]
         self.ignore = self.name in get_danger_options().temp_ignore_limits
-
+        self.temperature_sample_thread = self.klipper_threads.register_job(
+            target=self._sample_beacon_temperature
+        )
         self.temperature_sample_thread.start()
-
-    def _start_sample_timer(self):
-        wait_time = self._sample_beacon_temperature()
-        while wait_time > 0 and not self.printer.is_shutdown():
-            time.sleep(wait_time)
-            wait_time = self._sample_beacon_temperature()
 
     def get_mcu(self):
         return self.beacon._mcu
@@ -3967,7 +3959,6 @@ def load_config(config):
     beacon = BeaconProbe(config)
     config.get_printer().add_object("probe", BeaconProbeWrapper(beacon))
     pheaters = beacon.printer.load_object(config, "heaters")
-    beacon.mcu_temp_wrapper = BeaconMCUTempWrapper(beacon)
     pheaters.add_sensor_factory("beacon_coil", BeaconCoilTempWrapper)
     return beacon
 
