@@ -2827,7 +2827,8 @@ class BeaconMeshHelper:
         self.mesh_config = mesh_config
         self.bm = self.beacon.printer.load_object(mesh_config, "bed_mesh")
 
-        self.speed = mesh_config.getfloat("speed", 50.0, above=0.0, note_valid=False)
+        speed = mesh_config.getfloat("speed", 50.0, above=0.0, note_valid=False)
+        self.scan_speed = mesh_config.getfloat("scan_speed", speed, above=0.0)
         self.def_min_x, self.def_min_y = mesh_config.getfloatlist(
             "mesh_min", count=2, note_valid=False
         )
@@ -2840,9 +2841,7 @@ class BeaconMeshHelper:
         if self.def_min_y > self.def_max_y:
             self.def_min_y, self.def_max_y = self.def_max_y, self.def_min_y
 
-        self.def_res_x, self.def_res_y = mesh_config.getintlist(
-            "probe_count", count=2, note_valid=False
-        )
+        self.def_res_x, self.def_res_y = self.bm.scan_probe_count
         self.rri = mesh_config.getint(
             "relative_reference_index", None, note_valid=False
         )
@@ -2981,12 +2980,12 @@ class BeaconMeshHelper:
                 "x": {
                     "range": [self.def_min_x - xo, self.def_max_x - xo],
                     "machine": [status["axis_minimum"][0], status["axis_maximum"][0]],
-                    "count": self.def_res_y,
+                    "count": self.def_res_x,
                 },
                 "y": {
                     "range": [self.def_min_y - yo, self.def_max_y - yo],
                     "machine": [status["axis_minimum"][1], status["axis_maximum"][1]],
-                    "count": self.def_res_x,
+                    "count": self.def_res_y,
                 },
             }[self.dir]
 
@@ -3147,7 +3146,7 @@ class BeaconMeshHelper:
         probe_speed = gcmd.get_float("PROBE_SPEED", self.beacon.speed, above=0.0)
         self.beacon._move_to_probing_height(probe_speed)
 
-        speed = gcmd.get_float("SPEED", self.speed, above=0.0)
+        speed = gcmd.get_float("SPEED", self.scan_speed, above=0.0)
         runs = gcmd.get_int("RUNS", self.runs, minval=1)
 
         if self.beacon.printer.is_shutdown():
