@@ -2980,12 +2980,12 @@ class BeaconMeshHelper:
                 "x": {
                     "range": [self.def_min_x - xo, self.def_max_x - xo],
                     "machine": [status["axis_minimum"][0], status["axis_maximum"][0]],
-                    "count": self.def_res_x,
+                    "count": self.def_res_y,
                 },
                 "y": {
                     "range": [self.def_min_y - yo, self.def_max_y - yo],
                     "machine": [status["axis_minimum"][1], status["axis_maximum"][1]],
-                    "count": self.def_res_y,
+                    "count": self.def_res_x,
                 },
             }[self.dir]
 
@@ -3490,6 +3490,7 @@ class BeaconMeshHelper:
         return matrix.tolist()
 
     def _apply_mesh(self, matrix, gcmd):
+        self.bm.update_config(gcmd, beacon_scan=True, recompute=False)
         params = self.bm.bmc.mesh_config.copy()
         params["min_x"] = self.min_x
         params["max_x"] = self.max_x
