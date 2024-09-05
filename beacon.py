@@ -63,7 +63,7 @@ class BeaconProbe:
             "default_probe_method", PROBING_METHOD_CHOICES, "proximity"
         )
         self.default_mesh_method = config.getchoice(
-            "default_mesh_method", PROBING_METHOD_CHOICES, "proximity"
+            "default_mesh_method", PROBING_METHOD_CHOICES, self.default_probe_method
         )
 
         # If using paper for calibration, this would be .1mm
@@ -2853,38 +2853,26 @@ class BeaconMeshHelper:
             "adaptive_margin", 0, note_valid=False
         )
 
-        contact_def_min = config.getfloatlist(
-            "contact_mesh_min",
-            default=None,
-            count=2,
-        )
-        contact_def_max = config.getfloatlist(
-            "contact_mesh_max",
-            default=None,
-            count=2,
-        )
-
         xo = self.beacon.x_offset
         yo = self.beacon.y_offset
 
-        def_contact_min = contact_def_min
-        if contact_def_min is None:
-            def_contact_min = (
+        min_x, min_y = config.getfloatlist(
+            "contact_mesh_min",
+            default=(
                 max(self.def_min_x - xo, self.def_min_x),
                 max(self.def_min_y - yo, self.def_min_y),
-            )
-
-        def_contact_max = contact_def_max
-        if contact_def_max is None:
-            def_contact_max = (
+            ),
+            count=2,
+        )
+        max_x, max_y = config.getfloatlist(
+            "contact_mesh_max",
+            default=(
                 min(self.def_max_x - xo, self.def_max_x),
                 min(self.def_max_y - yo, self.def_max_y),
-            )
+            ),
+            count=2,
+        )
 
-        min_x = def_contact_min[0]
-        max_x = def_contact_max[0]
-        min_y = def_contact_min[1]
-        max_y = def_contact_max[1]
         self.def_contact_min = (min(min_x, max_x), min(min_y, max_y))
         self.def_contact_max = (max(min_x, max_x), max(min_y, max_y))
 
