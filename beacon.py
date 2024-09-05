@@ -54,8 +54,8 @@ class BeaconProbe:
         self.x_offset = config.getfloat("x_offset", 0.0)
         self.y_offset = config.getfloat("y_offset", 0.0)
 
-        self.trigger_distance = config.getfloat("trigger_distance", 3.0)
-        self.trigger_dive_threshold = config.getfloat("trigger_dive_threshold", 2.0)
+        self.trigger_distance = config.getfloat("trigger_distance", 2.0)
+        self.trigger_dive_threshold = config.getfloat("trigger_dive_threshold", 1.0)
         self.trigger_hysteresis = config.getfloat("trigger_hysteresis", 0.006)
         self.z_settling_time = config.getint("z_settling_time", 5, minval=0)
         self.default_probe_method = config.getchoice(
