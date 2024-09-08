@@ -3086,9 +3086,9 @@ class BeaconMeshHelper:
         )
         self.profile_name = gcmd.get("PROFILE", "default")
         self.reverse_mesh_direction = gcmd.get_int("reverse_mesh_direction",
-                                            self.def_reverse_mesh_direction,
-                                            minval=0,
-                                            maxval=1)
+                                                   self.def_reverse_mesh_direction,
+                                                   minval=0,
+                                                   maxval=1)
 
         if self.min_x > self.max_x:
             self.min_x, self.max_x = (
