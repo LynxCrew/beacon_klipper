@@ -2846,6 +2846,7 @@ class BeaconMeshHelper:
         self.dir = config.getchoice(
             "mesh_main_direction", {"x": "x", "X": "x", "y": "y", "Y": "y"}, "y"
         )
+        self.def_reverse_mesh_direction = config.getboolean("reverse_mesh_direction", False)
         self.overscan = config.getfloat("mesh_overscan", -1, minval=0)
         self.cluster_size = config.getfloat("mesh_cluster_size", 1, minval=0)
         self.runs = config.getint("mesh_runs", 1, minval=1)
@@ -3052,6 +3053,9 @@ class BeaconMeshHelper:
                 (x, y) = points[i]
                 points[i] = (y, x)
 
+        if self.reverse_mesh_direction:
+            points.reverse()
+
         return points
 
     def calibrate(self, gcmd):
@@ -3081,6 +3085,10 @@ class BeaconMeshHelper:
             lambda v, _d: max(v, 3),
         )
         self.profile_name = gcmd.get("PROFILE", "default")
+        self.reverse_mesh_direction = gcmd.get_int("reverse_mesh_direction",
+                                            self.def_reverse_mesh_direction,
+                                            minval=0,
+                                            maxval=1)
 
         if self.min_x > self.max_x:
             self.min_x, self.max_x = (
