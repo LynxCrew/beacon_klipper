@@ -2168,9 +2168,9 @@ class BeaconCoilTempWrapper:
         self.temp = self.min_temp = self.max_temp = 0.0
 
         self.reactor = self.printer.get_reactor()
-        self.sample_timer = None
-        self.temperature_sample_thread = threading.Thread(
-            target=self._start_sample_timer
+        self.klipper_threads = self.printer.get_klipper_threads()
+        self.temperature_sample_thread = self.klipper_threads.register_job(
+            target=self._sample_coil_temperature
         )
         self.ignore = self.name in get_danger_options().temp_ignore_limits
 
@@ -2179,12 +2179,6 @@ class BeaconCoilTempWrapper:
     def handle_coil_ready(self):
         self.beacon = self.printer.lookup_object("beacon")
         self.temperature_sample_thread.start()
-
-    def _start_sample_timer(self):
-        wait_time = self._sample_coil_temperature()
-        while wait_time > 0 and not self.printer.is_shutdown():
-            time.sleep(wait_time)
-            wait_time = self._sample_coil_temperature()
 
     def setup_callback(self, temperature_callback):
         self.temperature_callback = temperature_callback
@@ -2250,14 +2244,14 @@ class BeaconMCUTempWrapper:
         self.name = config.get_name().split()[-1]
         self.ignore = self.name in get_danger_options().temp_ignore_limits
         self.temperature_sample_thread = self.klipper_threads.register_job(
-            target=self._sample_beacon_temperature
+            target=self._sample_mcu_temperature
         )
         self.temperature_sample_thread.start()
 
     def get_mcu(self):
         return self.beacon._mcu
 
-    def _sample_beacon_temperature(self):
+    def _sample_mcu_temperature(self):
         self.temp, supply_voltage = self.beacon.last_mcu_temp
 
         if self.temp is not None:
