@@ -736,8 +736,8 @@ class BeaconProbe:
         # Descend while sampling
         toolhead.flush_step_generation()
         self.printer.send_event("beacon:probing_move_begin")
-        self._start_streaming()
         try:
+            self._start_streaming()
             self._sample_printtime_sync(50)
             with self.streaming_session(cb):
                 self._sample_printtime_sync(50)
@@ -1200,8 +1200,9 @@ class BeaconProbe:
         if self.printer.is_shutdown():
             raise self.printer.command_error("Probing failed due to printer shutdown")
         self.printer.send_event("beacon:probing_move_begin")
-        self._start_streaming()
         try:
+            self._start_streaming()
+
             (cur_dist, _samples) = self._sample(wait, 10)
             pos = self.toolhead.get_position()
             missing = target - cur_dist
