@@ -2168,8 +2168,7 @@ class BeaconCoilTempWrapper:
         self.temp = self.min_temp = self.max_temp = 0.0
 
         self.reactor = self.printer.get_reactor()
-        self.klipper_threads = self.printer.get_klipper_threads()
-        self.temperature_sample_thread = self.klipper_threads.register_job(
+        self.temperature_sample_thread = self.printer.get_klipper_threads().register_job(
             target=self._sample_coil_temperature
         )
         self.ignore = self.name in get_danger_options().temp_ignore_limits
@@ -2227,7 +2226,6 @@ class BeaconMCUTempWrapper:
         self.beacon = beacon
         self.printer = beacon.printer
         self.reactor = beacon.reactor
-        self.klipper_threads = self.printer.get_klipper_threads()
         self.measured_min = 99999999.0
         self.measured_max = 0.0
 
@@ -2243,7 +2241,7 @@ class BeaconMCUTempWrapper:
     def activate_wrapper(self, config):
         self.name = config.get_name().split()[-1]
         self.ignore = self.name in get_danger_options().temp_ignore_limits
-        self.temperature_sample_thread = self.klipper_threads.register_job(
+        self.temperature_sample_thread = self.printer.get_klipper_threads().register_job(
             target=self._sample_mcu_temperature
         )
         self.temperature_sample_thread.start()
