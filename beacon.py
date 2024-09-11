@@ -2230,13 +2230,13 @@ class BeaconMCUTempWrapper:
         self.measured_max = 0.0
 
         self.name = None
+        self.ignore = True
 
         self.temp = self.min_temp = self.max_temp = 0.0
         self.temperature_callback = None
 
         self.report_time = BEACON_REPORT_TIME
         self.temperature_sample_thread = None
-        self.ignore = True
 
     def activate_wrapper(self, config):
         self.name = config.get_name().split()[-1]
