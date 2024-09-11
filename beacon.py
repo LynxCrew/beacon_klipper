@@ -2172,9 +2172,8 @@ class BeaconCoilTempWrapper:
         self.temp = self.min_temp = self.max_temp = 0.0
 
         self.reactor = self.printer.get_reactor()
-        self.sample_timer = None
-        self.temperature_sample_thread = threading.Thread(
-            target=self._start_sample_timer
+        self.temperature_sample_thread = self.printer.get_klipper_threads().register_job(
+            target=self._sample_coil_temperature
         )
 
         self.printer.register_event_handler("klippy:ready", self.handle_coil_ready)
@@ -2182,12 +2181,6 @@ class BeaconCoilTempWrapper:
     def handle_coil_ready(self):
         self.beacon = self.printer.lookup_object("beacon")
         self.temperature_sample_thread.start()
-
-    def _start_sample_timer(self):
-        wait_time = self._sample_coil_temperature()
-        while wait_time > 0 and not self.printer.is_shutdown():
-            time.sleep(wait_time)
-            wait_time = self._sample_coil_temperature()
 
     def setup_callback(self, temperature_callback):
         self.temperature_callback = temperature_callback
