@@ -2158,6 +2158,7 @@ class BeaconCoilTempWrapper:
     def __init__(self, config):
         self.printer = config.get_printer()
         self.name = config.get_name().split()[-1]
+        self.ignore = self.name in get_danger_options().temp_ignore_limits
 
         self.beacon = None
 
@@ -2171,7 +2172,6 @@ class BeaconCoilTempWrapper:
         self.temperature_sample_thread = self.printer.get_klipper_threads().register_job(
             target=self._sample_coil_temperature
         )
-        self.ignore = self.name in get_danger_options().temp_ignore_limits
 
         self.printer.register_event_handler("klippy:ready", self.handle_coil_ready)
 
