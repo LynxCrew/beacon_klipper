@@ -63,7 +63,7 @@ class BeaconProbe:
             "default_probe_method", PROBING_METHOD_CHOICES, "proximity"
         )
         self.default_mesh_method = config.getchoice(
-            "default_mesh_method", PROBING_METHOD_CHOICES, self.default_probe_method
+            "default_mesh_method", MESHING_METHOD_CHOICES, self.default_probe_method
         )
 
         # If using paper for calibration, this would be .1mm
@@ -2597,6 +2597,12 @@ PROBING_METHOD_CHOICES = {
     "contact": "contact",
     "proximity": "proximity",
 }
+MESHING_METHOD_CHOICES = {
+    "contact": "contact",
+    "dive": "dive",
+    "scan": "scan",
+    "proximity": "scan",
+}
 
 
 class BeaconHomingHelper:
@@ -2869,6 +2875,9 @@ class BeaconMeshHelper:
         self.def_contact_min = (min(min_x, max_x), min(min_y, max_y))
         self.def_contact_max = (max(min_x, max_x), max(min_y, max_y))
 
+        logging.info(f"CONTACT_MESH_MIN: {self.def_contact_min}")
+        logging.info(f"CONTACT_MESH_MAX: {self.def_contact_max}")
+
         if self.zero_ref_pos is not None and self.rri is not None:
             logging.info(
                 "beacon: both 'zero_reference_position' and "
@@ -2906,7 +2915,7 @@ class BeaconMeshHelper:
     def cmd_BED_MESH_CALIBRATE(self, gcmd):
         method = gcmd.get("METHOD", "beacon").lower()
         probe_method = gcmd.get("PROBE_METHOD", self.beacon.default_mesh_method).lower()
-        if probe_method != "proximity":
+        if probe_method != "scan":
             method = "automatic"
         if method == "beacon":
             self.calibrate(gcmd)
