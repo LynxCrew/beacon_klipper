@@ -2818,12 +2818,8 @@ class BeaconMeshHelper:
         self.bm = self.beacon.printer.load_object(mesh_config, "bed_mesh")
 
         self.scan_speed = self.bm.bmc.scan_speed
-        self.def_min_x, self.def_min_y = mesh_config.getfloatlist(
-            "mesh_min", count=2, note_valid=False
-        )
-        self.def_max_x, self.def_max_y = mesh_config.getfloatlist(
-            "mesh_max", count=2, note_valid=False
-        )
+        self.def_min_x, self.def_min_y = self.bm.bmc.orig_config("mesh_min")
+        self.def_max_x, self.def_max_y = self.bm.bmc.orig_config("mesh_max")
 
         if self.def_min_x > self.def_max_x:
             self.def_min_x, self.def_max_x = self.def_max_x, self.def_min_x
@@ -2834,9 +2830,7 @@ class BeaconMeshHelper:
         self.rri = mesh_config.getint(
             "relative_reference_index", None, note_valid=False
         )
-        self.zero_ref_pos = mesh_config.getfloatlist(
-            "zero_reference_position", None, count=2
-        )
+        self.zero_ref_pos = self.bm.bmc.zero_ref_position
         self.zero_ref_pos_cluster_size = config.getfloat(
             "zero_reference_cluster_size", 1, minval=0
         )
@@ -2847,9 +2841,7 @@ class BeaconMeshHelper:
         self.overscan = config.getfloat("mesh_overscan", -1, minval=0)
         self.cluster_size = config.getfloat("mesh_cluster_size", 1, minval=0)
         self.runs = config.getint("mesh_runs", 1, minval=1)
-        self.adaptive_margin = mesh_config.getfloat(
-            "adaptive_margin", 0, note_valid=False
-        )
+        self.adaptive_margin = self.bm.bmc.adaptive_margin
 
         xo = self.beacon.x_offset
         yo = self.beacon.y_offset
@@ -2884,19 +2876,7 @@ class BeaconMeshHelper:
                 " former will be used"
             )
 
-        self.faulty_regions = []
-        for i in list(range(1, 100, 1)):
-            start = mesh_config.getfloatlist(
-                "faulty_region_%d_min" % (i,), None, count=2
-            )
-            if start is None:
-                break
-            end = mesh_config.getfloatlist("faulty_region_%d_max" % (i,), count=2)
-            x_min = min(start[0], end[0])
-            x_max = max(start[0], end[0])
-            y_min = min(start[1], end[1])
-            y_max = max(start[1], end[1])
-            self.faulty_regions.append(Region(x_min, x_max, y_min, y_max))
+        self.faulty_regions = self.bm.bmc.faulty_regions
 
         self.exclude_object = None
         beacon.printer.register_event_handler("klippy:connect", self._handle_connect)
