@@ -2830,7 +2830,7 @@ class BeaconMeshHelper:
         self.rri = mesh_config.getint(
             "relative_reference_index", None, note_valid=False
         )
-        self.zero_ref_pos = self.bm.bmc.zero_ref_position
+        self.zero_ref_pos = self.bm.bmc.zero_ref_pos
         self.zero_ref_pos_cluster_size = config.getfloat(
             "zero_reference_cluster_size", 1, minval=0
         )
