@@ -2818,8 +2818,8 @@ class BeaconMeshHelper:
         self.bm = self.beacon.printer.load_object(mesh_config, "bed_mesh")
 
         self.scan_speed = self.bm.bmc.scan_speed
-        self.def_min_x, self.def_min_y = self.bm.bmc.orig_config("mesh_min")
-        self.def_max_x, self.def_max_y = self.bm.bmc.orig_config("mesh_max")
+        self.def_min_x, self.def_min_y = self.bm.bmc.orig_config["mesh_min"]
+        self.def_max_x, self.def_max_y = self.bm.bmc.orig_config["mesh_max"]
 
         if self.def_min_x > self.def_max_x:
             self.def_min_x, self.def_max_x = self.def_max_x, self.def_min_x
