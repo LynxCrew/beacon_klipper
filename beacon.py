@@ -2854,7 +2854,7 @@ class BeaconMeshHelper:
         xo = self.beacon.x_offset
         yo = self.beacon.y_offset
 
-        min_x, min_y = config.getfloatlist(
+        min_x, min_y = mesh_config.getfloatlist(
             "contact_mesh_min",
             default=(
                 max(self.def_min_x - xo, self.def_min_x),
@@ -2862,7 +2862,7 @@ class BeaconMeshHelper:
             ),
             count=2,
         )
-        max_x, max_y = config.getfloatlist(
+        max_x, max_y = mesh_config.getfloatlist(
             "contact_mesh_max",
             default=(
                 min(self.def_max_x - xo, self.def_max_x),
