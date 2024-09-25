@@ -43,6 +43,7 @@ class BeaconProbe:
     def __init__(self, config):
         self.printer = config.get_printer()
         self.reactor = self.printer.get_reactor()
+        self.mcu_temp_wrapper = BeaconMCUTempWrapper(self)
         self.name = config.get_name()
 
         self.home_dir = os.path.dirname(os.path.realpath(__file__))
@@ -62,7 +63,7 @@ class BeaconProbe:
             "default_probe_method", PROBING_METHOD_CHOICES, "proximity"
         )
         self.default_mesh_method = config.getchoice(
-            "default_mesh_method", PROBING_METHOD_CHOICES, "proximity"
+            "default_mesh_method", MESHING_METHOD_CHOICES, self.default_probe_method
         )
 
         # If using paper for calibration, this would be .1mm
@@ -82,9 +83,6 @@ class BeaconProbe:
         self.autocal_max_retries = config.getfloat("autocal_max_retries", 3)
         self.contact_latency_min = config.getint("contact_latency_min", 0)
         self.contact_sensitivity = config.getint("contact_sensitivity", 0)
-
-        self.mcu_temp_wrapper = None
-        self.coil_temp_wrapper = None
 
         # Load models
         self.model = None
@@ -1198,6 +1196,7 @@ class BeaconProbe:
         next_dir = -1
 
         if self.printer.is_shutdown():
+
             raise self.printer.command_error("Probing failed due to printer shutdown")
         self.printer.send_event("beacon:probing_move_begin")
         try:
@@ -2600,6 +2599,12 @@ PROBING_METHOD_CHOICES = {
     "contact": "contact",
     "proximity": "proximity",
 }
+MESHING_METHOD_CHOICES = {
+    "contact": "contact",
+    "dive": "dive",
+    "scan": "scan",
+    "proximity": "scan",
+}
 
 
 class BeaconHomingHelper:
@@ -2814,75 +2819,57 @@ class BeaconMeshHelper:
         self.mesh_config = mesh_config
         self.bm = self.beacon.printer.load_object(mesh_config, "bed_mesh")
 
-        self.speed = mesh_config.getfloat("speed", 50.0, above=0.0, note_valid=False)
-        self.def_min_x, self.def_min_y = mesh_config.getfloatlist(
-            "mesh_min", count=2, note_valid=False
-        )
-        self.def_max_x, self.def_max_y = mesh_config.getfloatlist(
-            "mesh_max", count=2, note_valid=False
-        )
+        self.scan_speed = self.bm.bmc.scan_speed
+        self.def_min_x, self.def_min_y = self.bm.bmc.orig_config["mesh_min"]
+        self.def_max_x, self.def_max_y = self.bm.bmc.orig_config["mesh_max"]
 
         if self.def_min_x > self.def_max_x:
             self.def_min_x, self.def_max_x = self.def_max_x, self.def_min_x
         if self.def_min_y > self.def_max_y:
             self.def_min_y, self.def_max_y = self.def_max_y, self.def_min_y
 
-        self.def_res_x, self.def_res_y = mesh_config.getintlist(
-            "probe_count", count=2, note_valid=False
-        )
+        self.def_res_x, self.def_res_y = self.bm.bmc.scan_probe_count
         self.rri = mesh_config.getint(
             "relative_reference_index", None, note_valid=False
         )
-        self.zero_ref_pos = mesh_config.getfloatlist(
-            "zero_reference_position", None, count=2
-        )
+        self.zero_ref_pos = self.bm.bmc.zero_ref_pos
         self.zero_ref_pos_cluster_size = config.getfloat(
             "zero_reference_cluster_size", 1, minval=0
         )
         self.dir = config.getchoice(
             "mesh_main_direction", {"x": "x", "X": "x", "y": "y", "Y": "y"}, "y"
         )
+        self.def_reverse_mesh_direction = config.getboolean("reverse_mesh_direction", False)
         self.overscan = config.getfloat("mesh_overscan", -1, minval=0)
         self.cluster_size = config.getfloat("mesh_cluster_size", 1, minval=0)
         self.runs = config.getint("mesh_runs", 1, minval=1)
-        self.adaptive_margin = mesh_config.getfloat(
-            "adaptive_margin", 0, note_valid=False
-        )
-
-        contact_def_min = config.getfloatlist(
-            "contact_mesh_min",
-            default=None,
-            count=2,
-        )
-        contact_def_max = config.getfloatlist(
-            "contact_mesh_max",
-            default=None,
-            count=2,
-        )
+        self.adaptive_margin = self.bm.bmc.adaptive_margin
 
         xo = self.beacon.x_offset
         yo = self.beacon.y_offset
 
-        def_contact_min = contact_def_min
-        if contact_def_min is None:
-            def_contact_min = (
+        min_x, min_y = mesh_config.getfloatlist(
+            "contact_mesh_min",
+            default=(
                 max(self.def_min_x - xo, self.def_min_x),
                 max(self.def_min_y - yo, self.def_min_y),
-            )
-
-        def_contact_max = contact_def_max
-        if contact_def_max is None:
-            def_contact_max = (
+            ),
+            count=2,
+        )
+        max_x, max_y = mesh_config.getfloatlist(
+            "contact_mesh_max",
+            default=(
                 min(self.def_max_x - xo, self.def_max_x),
                 min(self.def_max_y - yo, self.def_max_y),
-            )
+            ),
+            count=2,
+        )
 
-        min_x = def_contact_min[0]
-        max_x = def_contact_max[0]
-        min_y = def_contact_min[1]
-        max_y = def_contact_max[1]
         self.def_contact_min = (min(min_x, max_x), min(min_y, max_y))
         self.def_contact_max = (max(min_x, max_x), max(min_y, max_y))
+
+        logging.info(f"CONTACT_MESH_MIN: {self.def_contact_min}")
+        logging.info(f"CONTACT_MESH_MAX: {self.def_contact_max}")
 
         if self.zero_ref_pos is not None and self.rri is not None:
             logging.info(
@@ -2891,19 +2878,7 @@ class BeaconMeshHelper:
                 " former will be used"
             )
 
-        self.faulty_regions = []
-        for i in list(range(1, 100, 1)):
-            start = mesh_config.getfloatlist(
-                "faulty_region_%d_min" % (i,), None, count=2
-            )
-            if start is None:
-                break
-            end = mesh_config.getfloatlist("faulty_region_%d_max" % (i,), count=2)
-            x_min = min(start[0], end[0])
-            x_max = max(start[0], end[0])
-            y_min = min(start[1], end[1])
-            y_max = max(start[1], end[1])
-            self.faulty_regions.append(Region(x_min, x_max, y_min, y_max))
+        self.faulty_regions = self.bm.bmc.faulty_regions
 
         self.exclude_object = None
         beacon.printer.register_event_handler("klippy:connect", self._handle_connect)
@@ -2921,7 +2896,7 @@ class BeaconMeshHelper:
     def cmd_BED_MESH_CALIBRATE(self, gcmd):
         method = gcmd.get("METHOD", "beacon").lower()
         probe_method = gcmd.get("PROBE_METHOD", self.beacon.default_mesh_method).lower()
-        if probe_method != "proximity":
+        if probe_method != "scan":
             method = "automatic"
         if method == "beacon":
             self.calibrate(gcmd)
@@ -3060,6 +3035,9 @@ class BeaconMeshHelper:
                 (x, y) = points[i]
                 points[i] = (y, x)
 
+        if self.reverse_mesh_direction:
+            points.reverse()
+
         return points
 
     def calibrate(self, gcmd):
@@ -3089,6 +3067,10 @@ class BeaconMeshHelper:
             lambda v, _d: max(v, 3),
         )
         self.profile_name = gcmd.get("PROFILE", "default")
+        self.reverse_mesh_direction = gcmd.get_int("reverse_mesh_direction",
+                                                   self.def_reverse_mesh_direction,
+                                                   minval=0,
+                                                   maxval=1)
 
         if self.min_x > self.max_x:
             self.min_x, self.max_x = (
@@ -3134,7 +3116,7 @@ class BeaconMeshHelper:
         probe_speed = gcmd.get_float("PROBE_SPEED", self.beacon.speed, above=0.0)
         self.beacon._move_to_probing_height(probe_speed)
 
-        speed = gcmd.get_float("SPEED", self.speed, above=0.0)
+        speed = gcmd.get_float("SPEED", self.scan_speed, above=0.0)
         runs = gcmd.get_int("RUNS", self.runs, minval=1)
 
         if self.beacon.printer.is_shutdown():
@@ -3478,6 +3460,7 @@ class BeaconMeshHelper:
         return matrix.tolist()
 
     def _apply_mesh(self, matrix, gcmd):
+        self.bm.update_config(gcmd, beacon_scan=True, recompute=False)
         params = self.bm.bmc.mesh_config.copy()
         params["min_x"] = self.min_x
         params["max_x"] = self.max_x
@@ -3954,7 +3937,6 @@ def load_config(config):
     beacon = BeaconProbe(config)
     config.get_printer().add_object("probe", BeaconProbeWrapper(beacon))
     pheaters = beacon.printer.load_object(config, "heaters")
-    beacon.mcu_temp_wrapper = BeaconMCUTempWrapper(beacon)
     pheaters.add_sensor_factory("beacon_coil", BeaconCoilTempWrapper)
     return beacon
 
