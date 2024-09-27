@@ -1196,7 +1196,6 @@ class BeaconProbe:
         next_dir = -1
 
         if self.printer.is_shutdown():
-
             raise self.printer.command_error("Probing failed due to printer shutdown")
         self.printer.send_event("beacon:probing_move_begin")
         try:
@@ -2867,9 +2866,6 @@ class BeaconMeshHelper:
 
         self.def_contact_min = (min(min_x, max_x), min(min_y, max_y))
         self.def_contact_max = (max(min_x, max_x), max(min_y, max_y))
-
-        logging.info(f"CONTACT_MESH_MIN: {self.def_contact_min}")
-        logging.info(f"CONTACT_MESH_MAX: {self.def_contact_max}")
 
         if self.zero_ref_pos is not None and self.rri is not None:
             logging.info(
