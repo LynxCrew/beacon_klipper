@@ -3456,7 +3456,7 @@ class BeaconMeshHelper:
         return matrix.tolist()
 
     def _apply_mesh(self, matrix, gcmd):
-        self.bm.update_config(gcmd, beacon_scan=True, recompute=False)
+        self.bm.bmc.update_config(gcmd, beacon_scan=True, recompute=False)
         params = self.bm.bmc.mesh_config.copy()
         params["min_x"] = self.min_x
         params["max_x"] = self.max_x
