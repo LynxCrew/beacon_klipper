@@ -1385,7 +1385,7 @@ class BeaconProbe:
 
         if not self.model:
             raise self.gcode.error(
-                "You must calibrate your model first, " "use BEACON_CALIBRATE."
+                "You must calibrate your model first, use BEACON_CALIBRATE."
             )
 
         # We use the model code to save the new offset, but we can't actually
@@ -2646,12 +2646,16 @@ class BeaconHomingHelper:
         )
 
         gcode_macro = beacon.printer.load_object(config, "gcode_macro")
+        self.tmpl_pre = gcode_macro.load_template(config, "home_gcode_pre", "")
+        self.tmpl_post = gcode_macro.load_template(config, "home_gcode_post", "")
         self.tmpl_pre_xy = gcode_macro.load_template(config, "home_gcode_pre_xy", "")
         self.tmpl_post_xy = gcode_macro.load_template(config, "home_gcode_post_xy", "")
         self.tmpl_pre_x = gcode_macro.load_template(config, "home_gcode_pre_x", "")
         self.tmpl_post_x = gcode_macro.load_template(config, "home_gcode_post_x", "")
         self.tmpl_pre_y = gcode_macro.load_template(config, "home_gcode_pre_y", "")
         self.tmpl_post_y = gcode_macro.load_template(config, "home_gcode_post_y", "")
+        self.tmpl_pre_z = gcode_macro.load_template(config, "home_gcode_pre_z", "")
+        self.tmpl_post_z = gcode_macro.load_template(config, "home_gcode_post_z", "")
 
         # Ensure homing is loaded so we can override G28
         beacon.printer.load_object(config, "homing")
@@ -2699,91 +2703,97 @@ class BeaconHomingHelper:
         if not (want_x or want_y or want_z):
             want_x = want_y = want_z = True
 
-        if want_x or want_y:
+        if want_x or want_y or want_z:
             orig_params = gcmd.get_command_parameters()
             raw_params = gcmd.get_raw_command_parameters()
-            self._run_hook(self.tmpl_pre_xy, orig_params, raw_params)
-            if self.home_y_before_x:
-                axis_order = "yx"
-            else:
-                axis_order = "xy"
-            for axis in axis_order:
-                if axis == "x" and want_x:
-                    self._run_hook(self.tmpl_pre_x, orig_params, raw_params)
-                    cmd = self.gcode.create_gcode_command("G28", "G28", {"X": "0"})
-                    self.prev_gcmd(cmd)
-                    self._run_hook(self.tmpl_post_x, orig_params, raw_params)
-                elif axis == "y" and want_y:
-                    self._run_hook(self.tmpl_pre_y, orig_params, raw_params)
-                    cmd = self.gcode.create_gcode_command("G28", "G28", {"Y": "0"})
-                    self.prev_gcmd(cmd)
-                    self._run_hook(self.tmpl_post_y, orig_params, raw_params)
-            self._run_hook(self.tmpl_post_xy, orig_params, raw_params)
+            self._run_hook(self.tmpl_pre, orig_params, raw_params)
 
-        if want_z:
-            curtime = self.beacon.reactor.monotonic()
-            kin = toolhead.get_kinematics()
-            kin_status = kin.get_status(curtime)
-            if "xy" not in kin_status["homed_axes"]:
-                raise gcmd.error("Must home X and Y axes before homing Z")
-
-            method = self.method
-            if "z" in kin_status["homed_axes"]:
-                method = self.method_when_homed
-
-            # G28 is not normally an extended gcode, so we need this hack
-            args = gcmd.get_commandline().split(" ")
-            for arg in args:
-                kv = arg.split("=")
-                if len(kv) == 2 and kv[0].strip().lower() == "method":
-                    method = HOMING_AUTOCAL_METHOD_CHOICES.get(
-                        kv[1].strip().lower(), None
-                    )
-                    if method is None:
-                        raise gcmd.error(
-                            "Invalid homing method, valid choices: proximity, proximity_if_available, contact"
-                        )
-                    break
-
-            pos = [self.home_pos[0], self.home_pos[1]]
-
-            if method == HOMING_AUTOCAL_METHOD_PROXIMITY_IF_AVAILABLE:
-                if self.beacon.model is not None:
-                    method = HOMING_AUTOCAL_METHOD_PROXIMITY
+            if want_x or want_y:
+                self._run_hook(self.tmpl_pre_xy, orig_params, raw_params)
+                if self.home_y_before_x:
+                    axis_order = "yx"
                 else:
-                    method = HOMING_AUTOCAL_METHOD_CONTACT
+                    axis_order = "xy"
+                for axis in axis_order:
+                    if axis == "x" and want_x:
+                        self._run_hook(self.tmpl_pre_x, orig_params, raw_params)
+                        cmd = self.gcode.create_gcode_command("G28", "G28", {"X": "0"})
+                        self.prev_gcmd(cmd)
+                        self._run_hook(self.tmpl_post_x, orig_params, raw_params)
+                    elif axis == "y" and want_y:
+                        self._run_hook(self.tmpl_pre_y, orig_params, raw_params)
+                        cmd = self.gcode.create_gcode_command("G28", "G28", {"Y": "0"})
+                        self.prev_gcmd(cmd)
+                        self._run_hook(self.tmpl_post_y, orig_params, raw_params)
+                self._run_hook(self.tmpl_post_xy, orig_params, raw_params)
 
-            if method == HOMING_AUTOCAL_METHOD_CONTACT:
-                toolhead.manual_move(pos, self.xy_move_speed)
+            if want_z:
+                self._run_hook(self.tmpl_pre_z, orig_params, raw_params)
+                curtime = self.beacon.reactor.monotonic()
+                kin = toolhead.get_kinematics()
+                kin_status = kin.get_status(curtime)
+                if "xy" not in kin_status["homed_axes"]:
+                    raise gcmd.error("Must home X and Y axes before homing Z")
 
-                calibrate = True
-                if self.autocal_create_model == HOMING_AUTOCAL_CALIBRATE_UNHOMED:
-                    calibrate = "z" not in kin_status["homed_axes"]
-                elif self.autocal_create_model == HOMING_AUTOCAL_CALIBRATE_NEVER:
-                    calibrate = False
+                method = self.method
+                if "z" in kin_status["homed_axes"]:
+                    method = self.method_when_homed
 
-                override = gcmd.get("CALIBRATE", None)
-                if override is not None:
-                    if override.lower() in ["=0", "=no", "=false"]:
-                        calibrate = False
+                # G28 is not normally an extended gcode, so we need this hack
+                args = gcmd.get_commandline().split(" ")
+                for arg in args:
+                    kv = arg.split("=")
+                    if len(kv) == 2 and kv[0].strip().lower() == "method":
+                        method = HOMING_AUTOCAL_METHOD_CHOICES.get(
+                            kv[1].strip().lower(), None
+                        )
+                        if method is None:
+                            raise gcmd.error(
+                                "Invalid homing method, valid choices: proximity, proximity_if_available, contact"
+                            )
+                        break
+
+                pos = [self.home_pos[0], self.home_pos[1]]
+
+                if method == HOMING_AUTOCAL_METHOD_PROXIMITY_IF_AVAILABLE:
+                    if self.beacon.model is not None:
+                        method = HOMING_AUTOCAL_METHOD_PROXIMITY
                     else:
-                        calibrate = True
+                        method = HOMING_AUTOCAL_METHOD_CONTACT
 
-                cmd = "BEACON_AUTO_CALIBRATE"
-                params = {}
-                if not calibrate:
-                    params["SKIP_MODEL_CREATION"] = "1"
-                cmd = self.gcode.create_gcode_command(cmd, cmd, params)
-                self.beacon.cmd_BEACON_AUTO_CALIBRATE(cmd)
-            elif method == HOMING_AUTOCAL_METHOD_PROXIMITY:
-                pos[0] -= self.beacon.x_offset
-                pos[1] -= self.beacon.y_offset
-                toolhead.manual_move(pos, self.xy_move_speed)
-                cmd = self.gcode.create_gcode_command("G28", "G28", {"Z": "0"})
-                self.prev_gcmd(cmd)
-            else:
-                raise gcmd.error("Invalid homing method '%s'" % (method,))
-            self._maybe_zhop(toolhead)
+                if method == HOMING_AUTOCAL_METHOD_CONTACT:
+                    toolhead.manual_move(pos, self.xy_move_speed)
+
+                    calibrate = True
+                    if self.autocal_create_model == HOMING_AUTOCAL_CALIBRATE_UNHOMED:
+                        calibrate = "z" not in kin_status["homed_axes"]
+                    elif self.autocal_create_model == HOMING_AUTOCAL_CALIBRATE_NEVER:
+                        calibrate = False
+
+                    override = gcmd.get("CALIBRATE", None)
+                    if override is not None:
+                        if override.lower() in ["=0", "=no", "=false"]:
+                            calibrate = False
+                        else:
+                            calibrate = True
+
+                    cmd = "BEACON_AUTO_CALIBRATE"
+                    params = {}
+                    if not calibrate:
+                        params["SKIP_MODEL_CREATION"] = "1"
+                    cmd = self.gcode.create_gcode_command(cmd, cmd, params)
+                    self.beacon.cmd_BEACON_AUTO_CALIBRATE(cmd)
+                elif method == HOMING_AUTOCAL_METHOD_PROXIMITY:
+                    pos[0] -= self.beacon.x_offset
+                    pos[1] -= self.beacon.y_offset
+                    toolhead.manual_move(pos, self.xy_move_speed)
+                    cmd = self.gcode.create_gcode_command("G28", "G28", {"Z": "0"})
+                    self.prev_gcmd(cmd)
+                else:
+                    raise gcmd.error("Invalid homing method '%s'" % (method,))
+                self._maybe_zhop(toolhead)
+                self._run_hook(self.tmpl_post_z, orig_params, raw_params)
+            self._run_hook(self.tmpl_post, orig_params, raw_params)
 
 
 class BeaconHomingState:
