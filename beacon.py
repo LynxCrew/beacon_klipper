@@ -366,6 +366,12 @@ class BeaconProbe:
             self.toolhead = self.printer.lookup_object("toolhead")
             self.trapq = self.toolhead.get_trapq()
 
+            rails = self.toolhead.get_kinematics().get_rails()
+            if len(rails) > 2:
+                rails[2].homing_retract_dist = 0
+                if hasattr(rails[2], "min_home_dist"):
+                    rails[2].min_home_dist = 0
+
             self.mcu_temp = BeaconMCUTempHelper.build_with_nvm(self)
             self.model_temp = self.model_temp_builder.build_with_nvm(self)
             if self.model_temp:
