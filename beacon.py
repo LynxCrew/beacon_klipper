@@ -5,6 +5,7 @@
 # Copyright (C) 2023 Beacon <beacon3d.com>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
+import re
 import threading
 import multiprocessing
 import subprocess
@@ -879,6 +880,9 @@ class BeaconProbe:
         self._stream_flush()
 
     def _stop_streaming(self):
+        if self.printer.is_shutdown():
+            self.force_stop_streaming()
+            return
         self._stream_en -= 1
         if self._stream_en == 0:
             self.reactor.update_timer(self._stream_timeout_timer, self.reactor.NEVER)
@@ -2925,6 +2929,9 @@ class BeaconMeshHelper:
         else:
             if probe_method == "dive":
                 gcmd._params["PROBE_METHOD"] = "proximity"
+                gcmd._commandline = re.sub(
+                    r"(?i)" + "dive", "proximity", gcmd._commandline
+                )
             # For backwards compatibility, ZRP is specified in probe coordinates.
             # When in contact mode, we need to remove the offset first
             if hasattr(self.bm.bmc, "zero_ref_pos"):
