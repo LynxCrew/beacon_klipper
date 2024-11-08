@@ -2924,6 +2924,7 @@ class BeaconMeshHelper:
             self.calibrate(gcmd)
         else:
             if probe_method == "dive":
+                logging.info(gcmd)
                 probe_method = "proximity"
             # For backwards compatibility, ZRP is specified in probe coordinates.
             # When in contact mode, we need to remove the offset first
