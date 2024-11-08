@@ -2613,7 +2613,7 @@ MESHING_METHOD_CHOICES = {
     "contact": "contact",
     "dive": "dive",
     "scan": "scan",
-    "proximity": "scan",
+    "proximity": "proximity",
 }
 
 
@@ -2915,11 +2915,16 @@ class BeaconMeshHelper:
     def cmd_BED_MESH_CALIBRATE(self, gcmd):
         method = gcmd.get("METHOD", "beacon").lower()
         probe_method = gcmd.get("PROBE_METHOD", self.beacon.default_mesh_method).lower()
-        if probe_method != "scan":
-            method = "automatic"
-        if method == "beacon":
+        if probe_method == "proximity":
+            if method == "beacon":
+                probe_method = "scan"
+            else:
+                probe_method = "dive"
+        if probe_method == "scan":
             self.calibrate(gcmd)
         else:
+            if probe_method == "dive":
+                probe_method = "proximity"
             # For backwards compatibility, ZRP is specified in probe coordinates.
             # When in contact mode, we need to remove the offset first
             if hasattr(self.bm.bmc, "zero_ref_pos"):
