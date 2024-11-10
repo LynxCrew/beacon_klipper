@@ -891,10 +891,12 @@ class BeaconProbe:
         self._stream_flush()
 
     def force_stop_streaming(self):
-        self.reactor.update_timer(self._stream_timeout_timer, self.reactor.NEVER)
-        if self.beacon_stream_cmd is not None:
-            self.beacon_stream_cmd.send([0])
-        self._stream_flush()
+        try:
+            self.reactor.update_timer(self._stream_timeout_timer, self.reactor.NEVER)
+        finally:
+            if self.beacon_stream_cmd is not None:
+                self.beacon_stream_cmd.send([0])
+            self._stream_flush()
 
     def _stream_timeout(self, eventtime):
         if self._stream_flush():
