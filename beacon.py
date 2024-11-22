@@ -1222,6 +1222,10 @@ class BeaconProbe:
                 raise gcmd.error("Target minus overrun must exceed 0mm")
 
             while len(samples_up) + len(samples_down) < num_samples:
+                if self.printer.is_shutdown():
+                    raise self.printer.command_error(
+                        "Probing failed due to printer shutdown"
+                    )
                 liftpos = [None, None, target + overrun * next_dir]
                 self.toolhead.manual_move(liftpos, lift_speed)
                 liftpos = [None, None, target]
