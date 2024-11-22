@@ -438,8 +438,10 @@ class BeaconProbe:
     def multi_probe_begin(self):
         self.printer.send_event("beacon:probing_move_begin")
         self._start_streaming()
+        logging.info("multi probe begin")
 
     def multi_probe_end(self):
+        logging.info("multi probe end")
         self._stop_streaming()
         self.printer.send_event("beacon:probing_move_end")
 
