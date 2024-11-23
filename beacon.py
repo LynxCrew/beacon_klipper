@@ -438,10 +438,8 @@ class BeaconProbe:
     def multi_probe_begin(self):
         self.printer.send_event("beacon:probing_move_begin")
         self._start_streaming()
-        logging.info("multi probe begin")
 
     def multi_probe_end(self):
-        logging.info("multi probe end")
         self._stop_streaming()
         self.printer.send_event("beacon:probing_move_end")
 
@@ -895,7 +893,6 @@ class BeaconProbe:
     def force_stop_streaming(self):
         try:
             self.reactor.update_timer(self._stream_timeout_timer, self.reactor.NEVER)
-            logging.info("force_stopping")
         finally:
             if self.beacon_stream_cmd is not None:
                 self.beacon_stream_cmd.send([0])
@@ -1225,10 +1222,10 @@ class BeaconProbe:
                 raise gcmd.error("Target minus overrun must exceed 0mm")
 
             while len(samples_up) + len(samples_down) < num_samples:
-                if self.printer.is_shutdown():
-                    raise self.printer.command_error(
-                        "Probing failed due to printer shutdown"
-                    )
+#                 if self.printer.is_shutdown():
+#                     raise self.printer.command_error(
+#                         "Probing failed due to printer shutdown"
+#                     )
                 liftpos = [None, None, target + overrun * next_dir]
                 self.toolhead.manual_move(liftpos, lift_speed)
                 liftpos = [None, None, target]
