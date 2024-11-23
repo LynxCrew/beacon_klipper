@@ -2710,6 +2710,8 @@ class BeaconHomingHelper:
 
     def cmd_G28(self, gcmd):
         toolhead = self.beacon.printer.lookup_object("toolhead")
+        orig_params = gcmd.get_command_parameters()
+        raw_params = gcmd.get_raw_command_parameters()
 
         self._maybe_zhop(toolhead)
 
