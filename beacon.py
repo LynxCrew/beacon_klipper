@@ -455,26 +455,15 @@ class BeaconProbe:
         return self.lift_speed
 
     def run_probe(self, gcmd):
-        if self.printer.is_shutdown():
-            raise self.printer.command_error("Probing failed due to printer shutdown")
         method = gcmd.get("PROBE_METHOD", self.default_probe_method).lower()
         self._current_probe = method
         if method == "proximity":
             return self._run_probe_proximity(gcmd)
         elif method == "contact":
-            if self.printer.is_shutdown():
-                raise self.printer.command_error(
-                    "Probing failed due to printer shutdown"
-                )
             self.printer.send_event("beacon:probing_move_begin")
             self._start_streaming()
             try:
                 return self._run_probe_contact(gcmd)
-            except self.printer.command_error:
-                if self.printer.is_shutdown():
-                    raise self.printer.command_error(
-                        "Probing failed due to printer shutdown"
-                    )
             finally:
                 self._stop_streaming()
                 self.printer.send_event("beacon:probing_move_end")
@@ -501,17 +490,10 @@ class BeaconProbe:
         if "z" not in toolhead.get_status(curtime)["homed_axes"]:
             raise self.printer.command_error("Must home before probe")
 
-        if self.printer.is_shutdown():
-            raise self.printer.command_error("Probing failed due to printer shutdown")
         self.printer.send_event("beacon:probing_move_begin")
         self._start_streaming()
         try:
             return self._probe(speed, allow_faulty=allow_faulty)
-        except self.printer.command_error:
-            if self.printer.is_shutdown():
-                raise self.printer.command_error(
-                    "Probing failed due to printer shutdown"
-                )
         finally:
             self._stop_streaming()
             self.printer.send_event("beacon:probing_move_end")
@@ -736,13 +718,12 @@ class BeaconProbe:
         def cb(sample):
             samples.append(sample)
 
-        if self.printer.is_shutdown():
-            raise self.printer.command_error("Probing failed due to printer shutdown")
         # Descend while sampling
         toolhead.flush_step_generation()
-        self.printer.send_event("beacon:probing_move_begin")
-        self._start_streaming()
         try:
+            self.printer.send_event("beacon:probing_move_begin")
+            self._start_streaming()
+
             self._sample_printtime_sync(50)
             with self.streaming_session(cb):
                 self._sample_printtime_sync(50)
@@ -751,11 +732,6 @@ class BeaconProbe:
                 toolhead.manual_move(curpos, cal_speed)
                 toolhead.flush_step_generation()
                 self._sample_printtime_sync(50)
-        except self.printer.command_error:
-            if self.printer.is_shutdown():
-                raise self.printer.command_error(
-                    "Probing failed due to printer shutdown"
-                )
         finally:
             self._stop_streaming()
             self.printer.send_event("beacon:probing_move_end")
@@ -1207,11 +1183,10 @@ class BeaconProbe:
 
         next_dir = -1
 
-        if self.printer.is_shutdown():
-            raise self.printer.command_error("Probing failed due to printer shutdown")
-        self.printer.send_event("beacon:probing_move_begin")
-        self._start_streaming()
         try:
+            self.printer.send_event("beacon:probing_move_begin")
+            self._start_streaming()
+
             (cur_dist, _samples) = self._sample(wait, 10)
             pos = self.toolhead.get_position()
             missing = target - cur_dist
@@ -1222,10 +1197,6 @@ class BeaconProbe:
                 raise gcmd.error("Target minus overrun must exceed 0mm")
 
             while len(samples_up) + len(samples_down) < num_samples:
-#                 if self.printer.is_shutdown():
-#                     raise self.printer.command_error(
-#                         "Probing failed due to printer shutdown"
-#                     )
                 liftpos = [None, None, target + overrun * next_dir]
                 self.toolhead.manual_move(liftpos, lift_speed)
                 liftpos = [None, None, target]
@@ -1234,11 +1205,6 @@ class BeaconProbe:
                 (dist, _samples) = self._sample(wait, 10)
                 {-1: samples_up, 1: samples_down}[next_dir].append(dist)
                 next_dir = next_dir * -1
-        except self.printer.command_error:
-            if self.printer.is_shutdown():
-                raise self.printer.command_error(
-                    "Probing failed due to printer shutdown"
-                )
         finally:
             self._stop_streaming()
             self.printer.send_event("beacon:probing_move_end")
@@ -1459,11 +1425,6 @@ class BeaconProbe:
                 f.write(obj)
 
             with self.streaming_session(cb):
-                if self.printer.is_shutdown():
-                    raise self.printer.command_error(
-                        "Poking failed due to printer shutdown"
-                    )
-
                 self._sample_async()
                 self.toolhead.get_last_move_time()
                 pos = self.toolhead.get_position()
@@ -1567,10 +1528,6 @@ class BeaconProbe:
 
                 set_max_accel(desired_accel)
 
-                if self.printer.is_shutdown():
-                    raise self.printer.command_error(
-                        "Probing failed due to printer shutdown"
-                    )
                 try:
                     hmove = HomingMove(
                         self.printer, [(self.mcu_contact_probe, "contact")]
@@ -1579,7 +1536,7 @@ class BeaconProbe:
                 except self.printer.command_error:
                     if self.printer.is_shutdown():
                         raise self.printer.command_error(
-                            "Probing failed due to printer shutdown"
+                            "Homing failed due to printer shutdown"
                         )
                     raise
                 finally:
@@ -2542,10 +2499,6 @@ class BeaconContactEndstopWrapper:
         return self._shared._trigger_completion
 
     def home_wait(self, home_end_time):
-        if self.beacon.printer.is_shutdown():
-            raise self.beacon.printer.command_error(
-                "Probing failed due to printer shutdown"
-            )
         try:
             ret = self._shared.trsync_stop(home_end_time)
             if ret is not None:
@@ -2582,11 +2535,6 @@ class BeaconContactEndstopWrapper:
                             "Contact triggered while accelerating"
                         )
                     return time
-        except self.beacon.printer.command_error:
-            if self.beacon.printer.is_shutdown():
-                raise self.beacon.printer.command_error(
-                    "Probing failed due to printer shutdown"
-                )
         finally:
             self.beacon.beacon_contact_stop_home_cmd.send()
 
@@ -3159,12 +3107,9 @@ class BeaconMeshHelper:
         speed = gcmd.get_float("SPEED", self.scan_speed, above=0.0)
         runs = gcmd.get_int("RUNS", self.runs, minval=1)
 
-        if self.beacon.printer.is_shutdown():
-            raise self.beacon.printer.command_error(
-                "Probing failed due to printer shutdown"
-            )
-        self.beacon._start_streaming()
         try:
+            self.beacon._start_streaming()
+
             # Move to first location
             (x, y) = path[0]
             self.toolhead.manual_move([x, y, None], speed)
@@ -3180,11 +3125,6 @@ class BeaconMeshHelper:
                     self._collect_zero_ref(speed, self.zero_ref_mode[1])
                 else:
                     self.zero_ref_val = median(self.zero_ref_bin)
-        except self.beacon.printer.command_error:
-            if self.beacon.printer.is_shutdown():
-                raise self.beacon.printer.command_error(
-                    "Probing failed due to printer shutdown"
-                )
         finally:
             self.beacon._stop_streaming()
 
