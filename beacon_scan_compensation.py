@@ -17,6 +17,7 @@ class BeaconScanCompensation:
             desc=self.cmd_BEACON_APPLY_SCAN_COMPENSATION_help,
         )
         self.pmgr = BedMeshProfileManager(self.config, self)
+        self.printer.register_event_handler("klippy:connect", self._connect)
 
     def _connect(self):
         if self.config.has_section("bed_mesh"):
@@ -71,10 +72,6 @@ class BeaconScanCompensation:
                     self.bed_mesh.z_mesh.build_mesh(new_points)
                     self.bed_mesh.save_profile(profile_name)
                     self.bed_mesh.set_mesh(self.bed_mesh.z_mesh)
-                    self.gcode.run_script_from_command(
-                        "CONSOLE_ECHO TYPE=debug TITLE='Beacon scan compensation' MSG='Mesh scan profile " + str(
-                            profile_name) + " compensated with contact profile " + str(
-                            profile) + "'")
         except BedMesh.BedMeshError as e:
             self.gcode.run_script_from_command(
                 "CONSOLE_ECHO TYPE=error TITLE='Beacon scan compensation error' MSG='" + str(
