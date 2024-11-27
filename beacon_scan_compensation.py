@@ -131,3 +131,7 @@ class BedMeshProfileManager:
         except BedMesh.BedMeshError as e:
             raise self.gcode.error(str(e))
         return z_mesh
+
+
+def load_config(config):
+    return BeaconScanCompensation(config)
