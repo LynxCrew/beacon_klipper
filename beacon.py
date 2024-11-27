@@ -3027,7 +3027,7 @@ class BeaconMeshHelper:
         return points
 
     def calibrate(self, gcmd):
-        use_full = gcmd.get_int("USE_CONTACT_AREA", 0) == 0
+        use_full = gcmd.get_int("USE_CONTACT_AREA", 0, minval=0, maxval=1)
         self.min_x, self.min_y = coord_fallback(
             gcmd,
             "MESH_MIN",
