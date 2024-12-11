@@ -1606,15 +1606,18 @@ class BeaconProbe:
         self._sample_async()
         start_pos = self.toolhead.get_position()
 
+        params = {
+            "SAMPLES_DROP": 1,
+            "SAMPLES": 3,
+        }
+        params.update(gcmd.get_command_parameters())
+
         # Do contact move
         epos = self._run_probe_contact(
             self.gcode.create_gcode_command(
                 "PROBE",
                 "PROBE",
-                {
-                    "SAMPLES_DROP": 1,
-                    "SAMPLES": 3,
-                },
+                params,
             )
         )
 
