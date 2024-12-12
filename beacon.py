@@ -2145,11 +2145,18 @@ class BeaconCoilTempWrapper:
         self.temp = self.min_temp = self.max_temp = 0.0
 
         self.reactor = self.printer.get_reactor()
-        self.temperature_sample_thread = (
-            self.printer.get_klipper_threads().register_job(
-                target=self._sample_coil_temperature
+        if hasattr(self.printer, "get_kalico_threads"):
+            self.temperature_sample_thread = (
+                self.printer.get_kalico_threads().register_job(
+                    target=self._sample_coil_temperature
+                )
             )
-        )
+        else:
+            self.temperature_sample_thread = (
+                self.printer.get_klipper_threads().register_job(
+                    target=self._sample_coil_temperature
+                )
+            )
 
         self.printer.register_event_handler("klippy:ready", self._handle_coil_ready)
 
@@ -2219,11 +2226,18 @@ class BeaconMCUTempWrapper:
     def activate_wrapper(self, config):
         self.name = config.get_name().split()[-1]
         self.ignore = self.name in get_danger_options().temp_ignore_limits
-        self.temperature_sample_thread = (
-            self.printer.get_klipper_threads().register_job(
-                target=self._sample_mcu_temperature
+        if hasattr(self.printer, "get_kalico_threads"):
+            self.temperature_sample_thread = (
+                self.printer.get_kalico_threads().register_job(
+                    target=self._sample_mcu_temperature
+                )
             )
-        )
+        else:
+            self.temperature_sample_thread = (
+                self.printer.get_klipper_threads().register_job(
+                    target=self._sample_mcu_temperature
+                )
+            )
         self.temperature_sample_thread.start()
 
     def get_mcu(self):
