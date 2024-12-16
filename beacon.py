@@ -2678,6 +2678,12 @@ class BeaconHomingHelper:
         orig_params = gcmd.get_command_parameters()
         raw_params = gcmd.get_raw_command_parameters()
 
+        pos = [self.home_pos[0], self.home_pos[1]]
+
+        def _move_to_home_pos():
+            toolhead.manual_move(pos, self.xy_move_speed)
+            self.gcode.run_script_from_command("M400")
+
         self._maybe_zhop(toolhead)
 
         want_x, want_y, want_z = [gcmd.get(a, None) is not None for a in "XYZ"]
@@ -2735,8 +2741,6 @@ class BeaconHomingHelper:
                             )
                         break
 
-                pos = [self.home_pos[0], self.home_pos[1]]
-
                 if method == HOMING_AUTOCAL_METHOD_PROXIMITY_IF_AVAILABLE:
                     if self.beacon.model is not None:
                         method = HOMING_AUTOCAL_METHOD_PROXIMITY
@@ -2744,7 +2748,7 @@ class BeaconHomingHelper:
                         method = HOMING_AUTOCAL_METHOD_CONTACT
 
                 if method == HOMING_AUTOCAL_METHOD_CONTACT:
-                    toolhead.manual_move(pos, self.xy_move_speed)
+                    _move_to_home_pos()
 
                     calibrate = True
                     if self.autocal_create_model == HOMING_AUTOCAL_CALIBRATE_UNHOMED:
@@ -2768,7 +2772,7 @@ class BeaconHomingHelper:
                 elif method == HOMING_AUTOCAL_METHOD_PROXIMITY:
                     pos[0] -= self.beacon.x_offset
                     pos[1] -= self.beacon.y_offset
-                    toolhead.manual_move(pos, self.xy_move_speed)
+                    _move_to_home_pos()
                     cmd = self.gcode.create_gcode_command("G28", "G28", {"Z": "0"})
                     self.prev_gcmd(cmd)
                 else:
