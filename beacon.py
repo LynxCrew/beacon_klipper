@@ -3990,12 +3990,13 @@ class BeaconTracker:
 
     def register_gcode_command(self, sensor, cmd, func, desc):
         if cmd not in self.gcodes:
-            self.gcode.register_command(cmd, self.dispatch_gcode, desc=desc)
-            self.gcodes[cmd] = {}
+            handlers = self.gcodes[cmd] = {}
+            self.gcode.register_command(
+                cmd, lambda gcmd: self.dispatch_gcode(handlers, gcmd), desc=desc
+            )
         self.gcodes[cmd][sensor] = func
 
-    def dispatch_gcode(self, gcmd):
-        handlers = self.gcodes[gcmd.get_command()]
+    def dispatch_gcode(self, handlers, gcmd):
         sensor = gcmd.get("SENSOR", "")
         if sensor == "":
             sensor = None
