@@ -3978,7 +3978,7 @@ class BeaconTracker:
             self.printer.add_object("probe", BeaconProbeWrapper(sensor))
         coil_name = "beacon_coil" if name is None else "beacon_%s_coil" % (name,)
 
-        pheaters = self.printer.printer.load_object(self.config, "heaters")
+        pheaters = self.printer.load_object(self.config, "heaters")
         pheaters.add_sensor_factory(coil_name, BeaconCoilTempWrapper)
         return sensor
 
@@ -4082,4 +4082,4 @@ def load_config_prefix(config):
         beacon._register_model(name, model)
         return model
     else:
-        raise config.error("Unknown beacon config directive '%s'" % (name,))
+        raise config.error("Unknown beacon config directive '%s'" % (secname,))
