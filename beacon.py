@@ -4026,9 +4026,14 @@ class BeaconTracker:
         handler = handlers.get(sensor, None)
         if not handler:
             if sensor is None:
-                raise req.error("No default Beacon registered, provide 'sensor' option to specify sensor.")
+                raise req.error(
+                    "No default Beacon registered, provide 'sensor' option to specify sensor."
+                )
             else:
-                raise req.error("Requested sensor '%s' not found, specify a valid or no sensor to use default" % (sensor,))
+                raise req.error(
+                    "Requested sensor '%s' not found, specify a valid or no sensor to use default"
+                    % (sensor,)
+                )
         handler(req)
 
 
@@ -4066,14 +4071,18 @@ def load_config_prefix(config):
     sensor = None
     secname = config.get_name()
     parts = secname[7:].split()
+
     if len(parts) != 0 and parts[0] == "sensor":
         if len(parts) < 2:
             raise config.error("Missing Beacon sensor name")
         sensor = parts[1]
         parts = parts[2:]
+
     beacon = beacons.get_or_add_sensor(sensor)
+
     if len(parts) == 0:
         return beacon
+
     if parts[0] == "model":
         if len(parts) != 2:
             raise config.error("Missing Beacon model name in section '%s'" % (secname,))
