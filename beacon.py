@@ -660,9 +660,7 @@ class BeaconProbe:
             curtime = self.printer.get_reactor().monotonic()
             kin_status = self.toolhead.get_status(curtime)
             if "xy" not in kin_status["homed_axes"]:
-                raise self.printer.command_error(
-                    "Must home X and Y " "before calibration"
-                )
+                raise self.printer.command_error("Must home X and Y before calibration")
 
             kin_pos = self.toolhead.get_position()
             if self._is_faulty_coordinate(kin_pos[0], kin_pos[1]):
@@ -681,7 +679,7 @@ class BeaconProbe:
                     - 2.0
                     - gcmd.get_float("CEIL", self.cal_ceil)
                 )
-                self.toolhead.set_position(pos, homing_axes=[2])
+                self.compat_toolhead_set_position_homing_z(self.toolhead, pos)
                 forced_z = True
 
             def cb(kin_pos):
@@ -693,8 +691,7 @@ class BeaconProbe:
         if kin_pos is None:
             if forced_z:
                 kin = self.toolhead.get_kinematics()
-                if hasattr(kin, "note_z_not_homed"):
-                    kin.note_z_not_homed()
+                self.compat_kin_note_z_not_homed(kin)
             return
 
         gcmd.respond_info("Beacon calibration starting")
@@ -1143,6 +1140,26 @@ class BeaconProbe:
     def _handle_req_dump(self, web_request):
         self._api_dump.add_web_client(web_request)
         web_request.send({"header": API_DUMP_FIELDS})
+
+    # Compat wrappers
+
+    def compat_toolhead_set_position_homing_z(self, toolhead, pos):
+        func = toolhead.set_position
+        kind = tuple
+        if hasattr(func, "__defaults__"):  # Python 3
+            kind = type(func.__defaults__[0])
+        else:  # Python 2
+            kind = type(func.func_defaults[0])
+        if kind is str:
+            return toolhead.set_position(pos, homing_axes="z")
+        else:
+            return toolhead.set_position(pos, homing_axes=[2])
+
+    def compat_kin_note_z_not_homed(self, kin):
+        if hasattr(kin, "note_z_not_homed"):
+            kin.note_z_not_homed()
+        elif hasattr(kin, "clear_homing_state"):
+            kin.clear_homing_state("z")
 
     # GCode command handlers
 
@@ -1598,8 +1615,7 @@ class BeaconProbe:
                 self._calibrate(gcmd, force_pos, force_pos[2], True, True)
 
         except self.printer.command_error:
-            if hasattr(kin, "note_z_not_homed"):
-                kin.note_z_not_homed()
+            self.compat_kin_note_z_not_homed(kin)
             raise
         finally:
             self.mcu_contact_probe.deactivate_gcode.run_gcode_from_command()
@@ -1686,7 +1702,8 @@ class BeaconModel:
 
     def save(self, beacon, show_message=True):
         configfile = beacon.printer.lookup_object("configfile")
-        section = "beacon model " + self.name
+        sensor_name = "" if beacon.id.is_unnamed() else "sensor %s " % (beacon.id.name)
+        section = "beacon " + sensor_name + "model " + self.name
         configfile.set(section, "model_coef", ",\n  ".join(map(str, self.poly.coef)))
         configfile.set(section, "model_domain", ",".join(map(str, self.poly.domain)))
         configfile.set(section, "model_range", "%f,%f" % (self.min_z, self.max_z))
@@ -2668,11 +2685,10 @@ class BeaconHomingHelper:
             move = [None, None, self.z_hop]
             if "z" not in kin_status["homed_axes"]:
                 pos[2] = 0
-                toolhead.set_position(pos, homing_axes=[2])
+                self.beacon.compat_toolhead_set_position_homing_z(toolhead, pos)
                 toolhead.manual_move(move, self.z_hop_speed)
                 toolhead.wait_moves()
-                if hasattr(kin, "note_z_not_homed"):
-                    kin.note_z_not_homed()
+                self.beacon.compat_kin_note_z_not_homed(kin)
             elif pos[2] < self.z_hop:
                 toolhead.manual_move(move, self.z_hop_speed)
                 toolhead.wait_moves()
@@ -3669,7 +3685,7 @@ class BeaconAccelHelper(object):
                 scale_val = float(scale_val_str)
             except Exception:
                 logging.error(
-                    "Beacon accelerometer scale %s could not be " "processed", name
+                    "Beacon accelerometer scale %s could not be processed", name
                 )
                 scale_val = 1  # Values will be weird, but scale will work
 
@@ -3679,14 +3695,12 @@ class BeaconAccelHelper(object):
 
         if not self.default_scale_name:
             if first_scale_name is None:
-                logging.error(
-                    "Could not determine default Beacon " "accelerometer scale"
-                )
+                logging.error("Could not determine default Beacon accelerometer scale")
             else:
                 self.default_scale_name = first_scale_name
         elif self.default_scale_name not in scales:
             logging.error(
-                "Default Beacon accelerometer scale '%s' not found, " " using '%s'",
+                "Default Beacon accelerometer scale '%s' not found, using '%s'",
                 self.default_scale_name,
                 first_scale_name,
             )
@@ -3977,7 +3991,6 @@ class BeaconTracker:
         if name is None:
             self.printer.add_object("probe", BeaconProbeWrapper(sensor))
         coil_name = "beacon_coil" if name is None else "beacon_%s_coil" % (name,)
-
         pheaters = self.printer.load_object(self.config, "heaters")
         pheaters.add_sensor_factory(coil_name, BeaconCoilTempWrapper)
         return sensor
