@@ -43,11 +43,11 @@ API_DUMP_FIELDS = ["dist", "temp", "pos", "freq", "time"]
 class BeaconProbe:
     def __init__(self, config, sensor_id):
         self.id = sensor_id
-        self.printer = printer = config.get_printer()
-        self.reactor = printer.get_reactor()
+        self.printer = config.get_printer()
+        self.reactor = self.printer.get_reactor()
         self.mcu_temp_wrapper = BeaconMCUTempWrapper(self)
         self.name = config.get_name()
-        self.gcode = printer.lookup_object("gcode")
+        self.gcode = self.printer.lookup_object("gcode")
 
         self.speed = config.getfloat("speed", 5.0, above=0.0)
         self.lift_speed = config.getfloat("lift_speed", self.speed, above=0.0)
@@ -143,7 +143,7 @@ class BeaconProbe:
         self.mod_axis_twist_comp = None
         self.get_z_compensation_value = lambda pos: 0.0
 
-        mainsync = printer.lookup_object("mcu")._clocksync
+        mainsync = self.printer.lookup_object("mcu")._clocksync
         self._mcu = MCU(config, SecondarySync(self.reactor, mainsync))
         orig_stats = self._mcu.stats
 
@@ -153,7 +153,7 @@ class BeaconProbe:
             return show, value
 
         self._mcu.stats = beacon_mcu_stats
-        printer.add_object("mcu " + self.name, self._mcu)
+        self.printer.add_object("mcu " + self.name, self._mcu)
         self.cmd_queue = self._mcu.alloc_command_queue()
         self._endstop_shared = BeaconEndstopShared(self)
         self.mcu_probe = BeaconEndstopWrapper(self)
@@ -176,11 +176,11 @@ class BeaconProbe:
             "register_as_probe", sensor_id.is_unnamed()
         )
         if register_as_probe:
-            printer.lookup_object("pins").register_chip("probe", self)
+            self.printer.lookup_object("pins").register_chip("probe", self)
 
         # Register event handlers
-        printer.register_event_handler("klippy:connect", self._handle_connect)
-        printer.register_event_handler("klippy:shutdown", self.force_stop_streaming)
+        self.printer.register_event_handler("klippy:connect", self._handle_connect)
+        self.printer.register_event_handler("klippy:shutdown", self.force_stop_streaming)
         self._mcu.register_config_callback(self._build_config)
         self._mcu.register_response(self._handle_beacon_data, "beacon_data")
         self._mcu.register_response(self._handle_beacon_status, "beacon_status")
@@ -1941,7 +1941,7 @@ class BeaconTempModelV1:
 class ModelManager:
     def __init__(self, beacon):
         self.beacon = beacon
-        self.gcode = beacon.printer.lookup_object("gcode")
+        self.gcode = beacon.gcode
         beacon.id.register_command(
             "BEACON_MODEL_SELECT",
             self.cmd_BEACON_MODEL_SELECT,
