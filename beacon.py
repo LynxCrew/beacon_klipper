@@ -180,7 +180,9 @@ class BeaconProbe:
 
         # Register event handlers
         self.printer.register_event_handler("klippy:connect", self._handle_connect)
-        self.printer.register_event_handler("klippy:shutdown", self.force_stop_streaming)
+        self.printer.register_event_handler(
+            "klippy:shutdown", self.force_stop_streaming
+        )
         self._mcu.register_config_callback(self._build_config)
         self._mcu.register_response(self._handle_beacon_data, "beacon_data")
         self._mcu.register_response(self._handle_beacon_status, "beacon_status")
@@ -2625,6 +2627,7 @@ class BeaconHomingHelper:
 
     def __init__(self, beacon, config, home_xy_position):
         self.beacon = beacon
+        self.gcode = self.beacon.gcode
         self.home_pos = home_xy_position
 
         for section in ["safe_z_homing"]:
@@ -2662,15 +2665,14 @@ class BeaconHomingHelper:
         self.tmpl_post_z = gcode_macro.load_template(config, "home_gcode_post_z", "")
 
         # Ensure homing is loaded so we can override G28
-        beacon.printer.load_object(config, "homing")
-        self.gcode = gcode = beacon.gcode
-        homing_override = beacon.printer.lookup_object("homing_override", None)
+        self.beacon.printer.load_object(config, "homing")
+        homing_override = self.beacon.printer.lookup_object("homing_override", None)
         if homing_override is not None:
             self.prev_gcmd = homing_override.prev_G28
             homing_override.prev_G28 = self.cmd_G28
         else:
-            self.prev_gcmd = gcode.register_command("G28", None)
-            gcode.register_command("G28", self.cmd_G28)
+            self.prev_gcmd = self.gcode.register_command("G28", None)
+            self.gcode.register_command("G28", self.cmd_G28)
 
     def _maybe_zhop(self, toolhead):
         if self.z_hop != 0:
