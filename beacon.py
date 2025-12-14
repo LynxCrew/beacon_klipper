@@ -39,6 +39,8 @@ STREAM_BUFFER_LIMIT_DEFAULT = 100
 STREAM_TIMEOUT = 1.0
 API_DUMP_FIELDS = ["dist", "temp", "pos", "freq", "time"]
 
+TRSYNC_TIMEOUT_DEFAULT = 0.025
+
 
 class BeaconProbe:
     def __init__(self, config, sensor_id):
@@ -84,6 +86,10 @@ class BeaconProbe:
         self.autocal_max_retries = config.getfloat("autocal_max_retries", 3)
         self.contact_latency_min = config.getint("contact_latency_min", 0)
         self.contact_sensitivity = config.getint("contact_sensitivity", 0)
+
+        self.trsync_timeout = config.getfloat(
+            "trsync_timeout", TRSYNC_TIMEOUT_DEFAULT, maxval=0.25
+        )
 
         self.skip_firmware_version_check = config.getboolean(
             "skip_firmware_version_check", False
@@ -2121,7 +2127,7 @@ class BeaconProbeWrapper:
     def get_lift_speed(self, gcmd=None):
         return self.beacon.get_lift_speed(gcmd)
 
-    def run_probe(self, gcmd):
+    def run_probe(self, gcmd, *args, **kwargs):
         result = self.beacon.run_probe(gcmd)
         if self.results is not None:
             self.results.append(result)
@@ -2315,9 +2321,6 @@ class BeaconMCUTempWrapper:
         }
 
 
-TRSYNC_TIMEOUT = 0.025
-
-
 class BeaconEndstopShared:
     def __init__(self, beacon):
         self.beacon = beacon
@@ -2362,7 +2365,7 @@ class BeaconEndstopShared:
 
     def trsync_start(self, print_time):
         self._trigger_completion = self.beacon.reactor.completion()
-        expire_timeout = TRSYNC_TIMEOUT
+        expire_timeout = self.beacon.trsync_timeout
         for i, trsync in enumerate(self._trsyncs):
             try:
                 trsync.start(print_time, self._trigger_completion, expire_timeout)
